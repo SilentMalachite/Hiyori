@@ -1,0 +1,20 @@
+/* Minimal, low-stimulus theme: 3 colors, calm contrasts */
+.root {
+    -fx-font-family: "Noto Sans", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    -fx-base: #f7f7f7;
+    -fx-control-inner-background: #ffffff;
+    -fx-accent: #4a90e2; /* primary */
+}
+
+.tab-pane .tab-header-area {
+    -fx-background-color: #efefef;
+}
+
+.list-cell, .text-area, .text-field {
+    -fx-font-size: 14px;
+}
+
+.button {
+    -fx-background-radius: 6;
+}
+
