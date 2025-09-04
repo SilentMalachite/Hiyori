@@ -73,7 +73,6 @@ jlink {
         val instOpts = mutableListOf("--name", appName)
         if (os.isMacOsX) {
             instOpts += listOf("--mac-package-name", appName, "--mac-package-identifier", macBundleId)
-            installerType = installerTypeProp.ifBlank { null }
         }
         if (os.isWindows) {
             instOpts += listOf("--win-dir-chooser", "--win-menu", "--win-menu-group", appName, "--win-shortcut")
@@ -84,5 +83,10 @@ jlink {
         if (os.isWindows && winIcon.exists()) instOpts += listOf("--icon", winIcon.absolutePath)
         if (os.isMacOsX && macIcon.exists()) instOpts += listOf("--icon", macIcon.absolutePath)
         installerOptions = instOpts
+
+        // Allow overriding installerType via property/ENV across all OS
+        if (installerTypeProp.isNotBlank()) {
+            installerType = installerTypeProp
+        }
     }
 }

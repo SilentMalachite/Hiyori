@@ -59,3 +59,4 @@ jobs:
           files: build/jpackage/*.pkg
           draft: false
           prerelease: false
+          generate_release_notes: true
