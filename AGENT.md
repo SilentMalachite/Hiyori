@@ -89,7 +89,7 @@ jlink --add-modules java.base,java.sql,javafx.controls,javafx.fxml \
       --output build/runtime
 
 # ネイティブパッケージ
-jpackage --name FastNoteSched \
+jpackage --name Hiyori \
          --app-version 0.1.0 \
          --input build/libs \
          --main-jar your-fat-jar.jar \

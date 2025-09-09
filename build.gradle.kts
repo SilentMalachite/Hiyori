@@ -1,7 +1,7 @@
 plugins {
     application
     id("org.openjfx.javafxplugin") version "0.0.14"
-    id("org.beryx.jlink") version "3.1.1"
+    id("org.beryx.jlink") version "3.0.1"
 }
 
 repositories {
@@ -16,6 +16,8 @@ java {
 
 dependencies {
     implementation("org.xerial:sqlite-jdbc:3.45.3.0")
+    // Suppress SLF4J binding warning at runtime (no logging needed for now)
+    runtimeOnly("org.slf4j:slf4j-nop:2.0.13")
 }
 
 javafx {
@@ -25,8 +27,6 @@ javafx {
 
 application {
     mainClass.set("app.MainApp")
-    // For jlink: explicit main module to align with merged module name
-    mainModule.set("hiyori.merged")
 }
 
 tasks.named<org.gradle.api.tasks.JavaExec>("run") {
@@ -35,7 +35,7 @@ tasks.named<org.gradle.api.tasks.JavaExec>("run") {
 }
 
 jlink {
-    options = listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages")
+    options = listOf("--strip-debug", "--compress=2", "--no-header-files", "--no-man-pages")
     // Non-modular project: name the merged module
     mergedModuleName = "hiyori.merged"
     // Explicit module name for the application (fallback)
