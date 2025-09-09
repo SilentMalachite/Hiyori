@@ -1,5 +1,10 @@
 Hiyori (JavaFX + SQLite)
 
+<!-- CI Status Badges -->
+[![macOS PKG (jpackage)](https://github.com/SilentMalachite/Hiyori/workflows/macOS%20PKG%20(jpackage)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/macos-jpackage.yml)
+[![Windows MSI / Linux DEB-RPM (jpackage)](https://github.com/SilentMalachite/Hiyori/workflows/Windows%20MSI%20/%20Linux%20DEB-RPM%20(jpackage)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/win-linux-jpackage.yml)
+[![Release Please](https://github.com/SilentMalachite/Hiyori/workflows/Release%20Please/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/release-please.yml)
+
 概要
 - Java 21 + JavaFX によるローカル専用「メモ + スケジュール」アプリ。
 - SQLite 永続化 (FTS5)・週ビューは Canvas で軽量描画。
