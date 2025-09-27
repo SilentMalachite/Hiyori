@@ -1,158 +1,144 @@
 package app;
 
+import app.config.AppConfig;
+import app.controller.MainController;
 import app.db.Database;
 import app.db.EventsDao;
 import app.db.NotesDao;
-import app.model.Event;
-import app.model.Note;
-import app.model.SearchItem;
-import app.model.NoteItem;
-import app.model.EventItem;
+import app.db.TransactionManager;
+import app.exception.DatabaseException;
+import app.service.EventService;
+import app.service.NoteService;
 import app.ui.WeekView;
-import app.util.Debouncer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 import javafx.beans.binding.Bindings;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.*;
-import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.Optional;
 
 public class MainApp extends Application {
+    private static final Logger logger = LoggerFactory.getLogger(MainApp.class);
+    
     private Database database;
     private NotesDao notesDao;
     private EventsDao eventsDao;
-
-    private final ObservableList<SearchItem> items = FXCollections.observableArrayList();
-    private final ListView<SearchItem> notesList = new ListView<>();
-    private final TextField titleField = new TextField();
-    private final TextArea bodyArea = new TextArea();
-    private final TextField searchField = new TextField();
-    private final Debouncer autosaveDebounce = new Debouncer(0.6); // 600ms
-    private final BooleanProperty editorFocused = new SimpleBooleanProperty(false);
-
-    private Note currentNote;
-    private WeekView weekView;
+    private TransactionManager transactionManager;
+    private NoteService noteService;
+    private EventService eventService;
+    private MainController mainController;
+    private AppConfig config;
 
     @Override
     public void start(Stage stage) {
         try {
-            initDatabase();
-        } catch (Exception e) {
-            showErrorAndExit("データベース初期化に失敗しました", e);
+            // 先に実行環境を整える（ログ/ディレクトリ等）。
+            prepareEnvironment();
+            logger.info("Starting Hiyori application");
+            initializeApplication();
+            createUI(stage);
+        } catch (DatabaseException e) {
+            logger.error("Application initialization failed", e);
+            showErrorAndExit("アプリケーション初期化に失敗しました", e);
             return;
         }
+    }
 
+    /**
+     * 実行前に必要なフォルダ等を用意する。
+     */
+    private void prepareEnvironment() {
+        try {
+            // ログフォルダ
+            Path logs = Path.of("logs");
+            if (!Files.exists(logs)) {
+                Files.createDirectories(logs);
+            }
+        } catch (IOException e) {
+            // ログはコンソールにも出るため致命的ではない
+            System.err.println("Failed to prepare environment: " + e.getMessage());
+        }
+    }
+
+    private void initializeApplication() throws DatabaseException {
+        // Initialize configuration
+        config = AppConfig.getInstance();
+        
+        // Initialize database
+        initDatabase();
+        
+        // Initialize services
+        transactionManager = new TransactionManager(database);
+        noteService = new NoteService(notesDao, transactionManager);
+        eventService = new EventService(eventsDao, transactionManager);
+        
+        // Initialize controller
+        mainController = new MainController(noteService, eventService);
+    }
+
+    private void createUI(Stage stage) {
         BorderPane root = new BorderPane();
-        root.getStylesheets().add(getClass().getResource("/application.css").toExternalForm());
+        var css = getClass().getResource("/application.css");
+        if (css != null) {
+            root.getStylesheets().add(css.toExternalForm());
+        }
 
         // Top: Global search
         HBox top = new HBox(8);
         top.setPadding(new Insets(10));
         Label searchLabel = new Label("Search");
-        searchField.setPromptText("メモ・予定を検索 (Ctrl/Cmd+K)");
-        HBox.setHgrow(searchField, Priority.ALWAYS);
-        top.getChildren().addAll(searchLabel, searchField);
+        HBox.setHgrow(mainController.getSearchField(), Priority.ALWAYS);
+        top.getChildren().addAll(searchLabel, mainController.getSearchField());
         root.setTop(top);
 
         // Left: Notes list
-        notesList.setItems(items);
-        notesList.setPrefWidth(280);
-        notesList.setCellFactory(v -> new ListCell<>() {
-            @Override
-            protected void updateItem(SearchItem item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                } else {
-                    setText(item.display());
-                }
-                setFont(Font.font(14));
-                setMinHeight(44); // ASD/ADHD: larger target size
-            }
-        });
-        root.setLeft(notesList);
+        root.setLeft(mainController.getNotesList());
 
         // Right: Editor
         VBox editor = new VBox(8);
         editor.setPadding(new Insets(10));
-        titleField.setPromptText("タイトル");
-        bodyArea.setPromptText("本文");
-        bodyArea.setWrapText(true);
-        VBox.setVgrow(bodyArea, Priority.ALWAYS);
-        editor.getChildren().addAll(titleField, bodyArea);
+        VBox.setVgrow(mainController.getBodyArea(), Priority.ALWAYS);
+        editor.getChildren().addAll(mainController.getTitleField(), mainController.getBodyArea());
         root.setCenter(editor);
 
         // Bottom: Calendar tabs (Week view focused)
         TabPane tabs = new TabPane();
         Tab weekTab = new Tab("週");
         weekTab.setClosable(false);
-        weekView = new WeekView(() -> eventsDao);
+        WeekView weekView = new WeekView(() -> eventService);
         weekTab.setContent(weekView.getNode());
         tabs.getTabs().add(weekTab);
         root.setBottom(tabs);
 
+        // Set up week view in controller
+        mainController.setWeekView(weekView);
+
         // Dimming other areas when editing (single-focus)
-        BooleanProperty anyEditorFocused = new SimpleBooleanProperty();
-        anyEditorFocused.bind(titleField.focusedProperty().or(bodyArea.focusedProperty()));
-        notesList.opacityProperty().bind(Bindings.when(anyEditorFocused).then(0.5).otherwise(1.0));
-        tabs.opacityProperty().bind(Bindings.when(anyEditorFocused).then(0.5).otherwise(1.0));
+        mainController.getNotesList().opacityProperty().bind(
+            Bindings.when(mainController.getEditorFocusedProperty()).then(0.5).otherwise(1.0));
+        tabs.opacityProperty().bind(
+            Bindings.when(mainController.getEditorFocusedProperty()).then(0.5).otherwise(1.0));
 
-        // Load initial notes
-        reloadNotes();
+        // Load initial data
+        mainController.loadInitialData();
 
-        // List selection -> load into editor
-        notesList.getSelectionModel().selectedItemProperty().addListener((obs, a, b) -> {
-            if (b instanceof NoteItem ni) {
-                loadNote(ni.note());
-            } else if (b instanceof EventItem ei) {
-                weekView.showEvent(ei.event().getId());
-            } else if (b == null) {
-                clearEditor();
-            }
-        });
-
-        // Autosave on edit with debounce
-        Runnable autosave = () -> Platform.runLater(this::saveCurrentNoteIfChanged);
-        titleField.textProperty().addListener((obs, a, b) -> autosaveDebounce.call(autosave));
-        bodyArea.textProperty().addListener((obs, a, b) -> autosaveDebounce.call(autosave));
-
-        // Search
-        Debouncer searchDebounce = new Debouncer(0.3);
-        searchField.setOnKeyTyped(e -> searchDebounce.call(() -> Platform.runLater(this::performGlobalSearch)));
-        searchField.setOnAction(e -> performGlobalSearch());
-
-        // Shortcuts
-        Scene scene = new Scene(root, 1200, 800);
-        addShortcuts(scene);
+        // Setup shortcuts
+        Scene scene = new Scene(root, config.getWindowWidth(), config.getWindowHeight());
+        mainController.setupShortcuts(scene);
 
         stage.setTitle("Hiyori");
         stage.setScene(scene);
         stage.show();
-
-        // Select the first item if exists
-        if (!items.isEmpty()) notesList.getSelectionModel().selectFirst();
 
         // Load events in week view
         weekView.reload();
@@ -169,89 +155,30 @@ public class MainApp extends Application {
         }
     }
 
-    private void addShortcuts(Scene scene) {
-        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN), this::createNewNote);
-        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.K, KeyCombination.SHORTCUT_DOWN), () -> {
-            searchField.requestFocus();
-            searchField.selectAll();
-        });
-        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN), this::saveCurrentNoteIfChanged);
-        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), () -> {
-            weekView.quickAddEventAtNow();
-        });
-    }
 
-    private void performGlobalSearch() {
-        String q = searchField.getText().trim();
-        if (q.isEmpty()) {
-            reloadNotes();
-            return;
-        }
-        // Filter notes using FTS and show results in the list; events are not shown here but week view can be navigated.
-        List<Note> foundNotes = notesDao.searchNotes(q, 300);
-        List<Event> foundEvents = eventsDao.searchByTitle(q, 200);
-        items.clear();
-        for (Note n : foundNotes) items.add(new NoteItem(n));
-        for (Event e : foundEvents) items.add(new EventItem(e));
-        if (!items.isEmpty()) notesList.getSelectionModel().selectFirst();
-    }
-
-    private void initDatabase() throws Exception {
-        Path dataDir = Path.of("data");
-        if (!Files.exists(dataDir)) Files.createDirectories(dataDir);
-        Path dbPath = dataDir.resolve("app.db");
-        database = new Database(dbPath.toString());
-        database.initialize();
-        notesDao = new NotesDao(database);
-        eventsDao = new EventsDao(database);
-    }
-
-    private void reloadNotes() {
-        List<Note> list = notesDao.listRecent(500);
-        items.setAll(list.stream().map(NoteItem::new).toList());
-    }
-
-    private void loadNote(Note n) {
-        currentNote = n;
-        titleField.setText(n.getTitle());
-        bodyArea.setText(n.getBody());
-    }
-
-    private void clearEditor() {
-        currentNote = null;
-        titleField.clear();
-        bodyArea.clear();
-    }
-
-    private void createNewNote() {
-        Note n = new Note();
-        n.setTitle("無題のメモ");
-        n.setBody("");
-        long now = Instant.now().getEpochSecond();
-        n.setCreatedAt(now);
-        n.setUpdatedAt(now);
-        long id = notesDao.insert(n);
-        n.setId(id);
-        reloadNotes();
-        if (!items.isEmpty()) notesList.getSelectionModel().selectFirst();
-    }
-
-    private void saveCurrentNoteIfChanged() {
-        if (currentNote == null) return;
-        String title = Optional.ofNullable(titleField.getText()).orElse("").trim();
-        String body = Optional.ofNullable(bodyArea.getText()).orElse("");
-        if (!title.equals(currentNote.getTitle()) || !body.equals(currentNote.getBody())) {
-            currentNote.setTitle(title.isEmpty() ? "無題のメモ" : title);
-            currentNote.setBody(body);
-            currentNote.setUpdatedAt(Instant.now().getEpochSecond());
-            notesDao.update(currentNote);
-            // refresh title in list cell
-            notesList.refresh();
+    private void initDatabase() throws DatabaseException {
+        try {
+            // 設定のパスをそのまま使用（相対ならカレント基準）。
+            Path dbPath = Path.of(config.getDatabasePath());
+            Path parent = dbPath.getParent();
+            if (parent != null && !Files.exists(parent)) {
+                logger.info("Creating data directory: {}", parent);
+                Files.createDirectories(parent);
+            }
+            logger.info("Initializing database at: {}", dbPath);
+            database = new Database(dbPath.toString());
+            database.initialize();
+            notesDao = new NotesDao(database);
+            eventsDao = new EventsDao(database);
+            logger.info("Database initialization completed successfully");
+        } catch (IOException e) {
+            logger.error("Failed to create data directory", e);
+            throw new DatabaseException("データディレクトリの作成に失敗しました", e);
         }
     }
 
-    private void showErrorAndExit(String message, Exception e) {
-        e.printStackTrace();
+    private void showErrorAndExit(String message, DatabaseException e) {
+        logger.error("Fatal error occurred", e);
         Alert alert = new Alert(Alert.AlertType.ERROR, message + "\n" + e.getMessage(), ButtonType.CLOSE);
         alert.showAndWait();
         Platform.exit();
@@ -259,5 +186,18 @@ public class MainApp extends Application {
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    @Override
+    public void stop() {
+        // アプリ終了時にDBをクローズ
+        if (database != null) {
+            try {
+                database.close();
+                logger.info("Database connection closed");
+            } catch (Exception e) {
+                logger.warn("Failed to close database", e);
+            }
+        }
     }
 }

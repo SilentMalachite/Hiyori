@@ -1,7 +1,29 @@
+import java.time.Duration
+
 plugins {
     application
     id("org.openjfx.javafxplugin") version "0.0.14"
     id("org.beryx.jlink") version "3.0.1"
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+    
+    // Test configuration
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = false
+    }
+    
+    // JVM arguments for tests
+    jvmArgs("-Dfile.encoding=UTF-8")
+    
+    // Test timeout
+    timeout.set(Duration.ofMinutes(5))
+    
+    // Parallel execution
+    maxParallelForks = Runtime.getRuntime().availableProcessors()
 }
 
 repositories {
@@ -18,6 +40,13 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.45.3.0")
     // Suppress SLF4J binding warning at runtime (no logging needed for now)
     runtimeOnly("org.slf4j:slf4j-nop:2.0.13")
+    
+    // Testing dependencies
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
+    testImplementation("org.mockito:mockito-core:5.7.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.7.0")
+    testImplementation("org.assertj:assertj-core:3.24.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 javafx {

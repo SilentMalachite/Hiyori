@@ -27,8 +27,11 @@ Hiyori (JavaFX + SQLite)
 - 新規予定 (クイック): Ctrl/Cmd+Shift+N (現在時刻から 90 分)
 
 データベース
-- `data/app.db` に SQLite を作成。
+- 既定で `data/app.db` に SQLite を作成（`src/main/resources/app.properties` の `database.path` で変更可）。
 - テーブル: `notes`, `notes_fts`(FTS5), `events`。トリガで FTS 同期。
+
+ログ
+- コンソール出力に加え、`logs/hiyori.log` へ日次ローテーション（10MB分割、保持30日）。
 
 注意
 - JavaFX は OS ごとにネイティブ依存があります。Gradle で自動解決しますが、
@@ -93,3 +96,4 @@ CI/環境ごとの上書き（Gradleプロパティまたは環境変数）
 開発者向け
 - 仕様は `AGENT.md` を参照
 - 貢献方法は `CONTRIBUTING.md` を参照
+- CI: GitHub Actions で Linux 上のビルド（テストはスキップ）を実行

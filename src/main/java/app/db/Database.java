@@ -1,28 +1,45 @@
 package app.db;
 
+import app.config.AppConfig;
+import app.exception.DatabaseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.*;
 
 public class Database {
+    private static final Logger logger = LoggerFactory.getLogger(Database.class);
     private final String url;
     private Connection conn;
+    private final int busyTimeoutMs;
 
     public Database(String path) {
         this.url = "jdbc:sqlite:" + path;
+        this.busyTimeoutMs = AppConfig.getInstance().getDatabaseConnectionTimeoutMs();
     }
 
-    public void initialize() throws SQLException {
-        conn = DriverManager.getConnection(url);
-        try (Statement st = conn.createStatement()) {
-            st.execute("PRAGMA foreign_keys=ON");
-            st.execute("PRAGMA journal_mode=WAL");
-            st.execute("PRAGMA synchronous=NORMAL");
+    public void initialize() throws DatabaseException {
+        try {
+            logger.info("Initializing database connection to: {}", url);
+            conn = DriverManager.getConnection(url);
+            try (Statement st = conn.createStatement()) {
+                st.execute("PRAGMA foreign_keys=ON");
+                st.execute("PRAGMA journal_mode=WAL");
+                st.execute("PRAGMA synchronous=NORMAL");
+                st.execute("PRAGMA busy_timeout=" + busyTimeoutMs);
+            }
+            createSchema();
+            logger.info("Database initialized successfully");
+        } catch (SQLException e) {
+            logger.error("Failed to initialize database", e);
+            throw new DatabaseException("データベースの初期化に失敗しました", e);
         }
-        createSchema();
     }
 
     public Connection getConnection() { return conn; }
 
     private void createSchema() throws SQLException {
+        logger.debug("Creating database schema");
         try (Statement st = conn.createStatement()) {
             st.executeUpdate("CREATE TABLE IF NOT EXISTS notes (" +
                     "id INTEGER PRIMARY KEY, " +
@@ -51,5 +68,10 @@ public class Database {
             st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_epoch_sec)");
         }
     }
-}
 
+    public void close() throws SQLException {
+        if (conn != null && !conn.isClosed()) {
+            conn.close();
+        }
+    }
+}

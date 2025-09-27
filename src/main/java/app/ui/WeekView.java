@@ -1,7 +1,11 @@
 package app.ui;
 
-import app.db.EventsDao;
+import app.config.AppConfig;
+import app.service.EventService;
+import app.exception.DataAccessException;
 import app.model.Event;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.canvas.Canvas;
@@ -22,7 +26,8 @@ import java.util.function.Supplier;
  * Lightweight week view using Canvas as per spec.
  */
 public class WeekView {
-    private final Supplier<EventsDao> eventsDaoSupplier;
+    private static final Logger logger = LoggerFactory.getLogger(WeekView.class);
+    private final Supplier<EventService> eventServiceSupplier;
     private final Pane root = new Pane();
     private final Canvas canvas = new Canvas();
     private final Insets padding = new Insets(8, 8, 8, 48); // left space for time labels
@@ -46,10 +51,12 @@ public class WeekView {
     private static final double HANDLE_SIZE = 6; // px
 
     private Long highlightEventId = null;
+    private final int snapStepMinutes;
 
-    public WeekView(Supplier<EventsDao> eventsDaoSupplier) {
-        this.eventsDaoSupplier = eventsDaoSupplier;
+    public WeekView(Supplier<EventService> eventServiceSupplier) {
+        this.eventServiceSupplier = eventServiceSupplier;
         this.weekStart = LocalDate.now().with(DayOfWeek.MONDAY);
+        this.snapStepMinutes = AppConfig.getInstance().getEventSnapMinutes();
         root.getChildren().add(canvas);
         root.setMinHeight(24 * hourHeight + dayHeaderHeight + padding.getTop() + padding.getBottom());
         root.heightProperty().addListener((obs, a, b) -> layoutCanvas());
@@ -114,17 +121,30 @@ public class WeekView {
                 long start = Math.min(dragStartEpoch, dragEndEpoch);
                 long end = Math.max(dragStartEpoch, dragEndEpoch);
                 if (end - start < 5 * 60) end = start + 5 * 60; // minimum 5 minutes
-                eventsDaoSupplier.get().insert("新規予定", start, end);
-                dragMode = DragMode.NONE;
-                reload();
+                try {
+                    eventServiceSupplier.get().createEvent("新規予定", start, end);
+                    dragMode = DragMode.NONE;
+                    reload();
+                } catch (DataAccessException ex) {
+                    logger.error("Failed to insert new event", ex);
+                    dragMode = DragMode.NONE;
+                    draw();
+                }
             } else if (dragTarget != null) {
-                eventsDaoSupplier.get().update(dragTarget);
-                long id = dragTarget.getId();
-                dragTarget = null;
-                dragMode = DragMode.NONE;
-                reload();
-                // keep highlight on moved/edited event
-                highlightEvent(id);
+                try {
+                    eventServiceSupplier.get().updateEvent(dragTarget);
+                    long id = dragTarget.getId();
+                    dragTarget = null;
+                    dragMode = DragMode.NONE;
+                    reload();
+                    // keep highlight on moved/edited event
+                    highlightEvent(id);
+                } catch (DataAccessException ex) {
+                    logger.error("Failed to update event", ex);
+                    dragTarget = null;
+                    dragMode = DragMode.NONE;
+                    draw();
+                }
             }
         });
 
@@ -141,18 +161,28 @@ public class WeekView {
     public Node getNode() { return root; }
 
     public void reload() {
-        long start = weekStart.atStartOfDay(zone).toEpochSecond();
-        long end = weekStart.plusDays(7).atStartOfDay(zone).toEpochSecond();
-        events.clear();
-        events.addAll(eventsDaoSupplier.get().listBetween(start, end));
-        draw();
+        try {
+            long start = weekStart.atStartOfDay(zone).toEpochSecond();
+            long end = weekStart.plusDays(7).atStartOfDay(zone).toEpochSecond();
+            events.clear();
+            events.addAll(eventServiceSupplier.get().getEventsBetween(start, end));
+            logger.debug("Reloaded {} events for week starting {}", events.size(), weekStart);
+            draw();
+        } catch (DataAccessException ex) {
+            logger.error("Failed to reload events", ex);
+            // Keep existing events and redraw
+            draw();
+        }
     }
 
     public void quickAddEventAtNow() {
-        long now = Instant.now().getEpochSecond();
-        long end = now + 90 * 60; // default 90min focus block
-        eventsDaoSupplier.get().insert("集中 (90分)", now, end);
-        reload();
+        try {
+            eventServiceSupplier.get().createEventFromNow("集中 (90分)");
+            logger.debug("Quick added 90-minute focus block");
+            reload();
+        } catch (DataAccessException ex) {
+            logger.error("Failed to quick add event", ex);
+        }
     }
 
     private void layoutCanvas() {
@@ -192,7 +222,8 @@ public class WeekView {
         g.setLineWidth(1.0);
         for (int hIdx = 0; hIdx <= 24; hIdx++) {
             double y = contentY + hIdx * hourHeight;
-            g.setStroke(hIdx % 1 == 0 ? hourBold : gridColor);
+            // 時刻線は常に強調色
+            g.setStroke(hourBold);
             g.strokeLine(contentX, y, contentX + contentW, y);
             if (hIdx < 24) {
                 g.setFill(Color.web("#666666"));
@@ -369,14 +400,11 @@ public class WeekView {
     }
 
     private int snapMinutes(int minutes) {
-        int[] options = {0, 5, 10, 15, 30, 45};
-        int best = 0;
-        int bestDiff = 1000;
-        for (int opt : options) {
-            int diff = Math.abs(minutes - opt);
-            if (diff < bestDiff) { best = opt; bestDiff = diff; }
-        }
-        return best;
+        int step = Math.max(1, Math.min(30, snapStepMinutes));
+        int snapped = (int) Math.round(minutes / (double) step) * step;
+        if (snapped >= 60) snapped = 59; // 60分は分としては扱わない
+        if (snapped < 0) snapped = 0;
+        return snapped;
     }
 
     private String dayLabel(int idx) {
@@ -395,14 +423,22 @@ public class WeekView {
     }
 
     public void showEvent(long eventId) {
-        // center view to week of event and highlight
-        Event ev = eventsDaoSupplier.get().get(eventId);
-        if (ev == null) return;
-        LocalDateTime sdt = LocalDateTime.ofInstant(Instant.ofEpochSecond(ev.getStartEpochSec()), zone);
-        LocalDate d = sdt.toLocalDate();
-        this.weekStart = d.with(DayOfWeek.MONDAY);
-        reload();
-        highlightEvent(eventId);
+        try {
+            // center view to week of event and highlight
+            Event ev = eventServiceSupplier.get().getEvent(eventId);
+            if (ev == null) {
+                logger.warn("Event not found with ID: {}", eventId);
+                return;
+            }
+            LocalDateTime sdt = LocalDateTime.ofInstant(Instant.ofEpochSecond(ev.getStartEpochSec()), zone);
+            LocalDate d = sdt.toLocalDate();
+            this.weekStart = d.with(DayOfWeek.MONDAY);
+            logger.debug("Showing event ID: {} on week starting {}", eventId, weekStart);
+            reload();
+            highlightEvent(eventId);
+        } catch (DataAccessException ex) {
+            logger.error("Failed to show event ID: {}", eventId, ex);
+        }
     }
 
     private void highlightEvent(long eventId) {
@@ -419,13 +455,17 @@ public class WeekView {
         var resultOpt = dlg.showAndWait();
         if (resultOpt.isPresent()) {
             var res = resultOpt.get();
-            if (res.action() == EventEditorDialog.Action.SAVE && res.event() != null) {
-                eventsDaoSupplier.get().update(res.event());
-                reload();
-                highlightEvent(res.event().getId());
-            } else if (res.action() == EventEditorDialog.Action.DELETE) {
-                eventsDaoSupplier.get().delete(target.getId());
-                reload();
+            try {
+                if (res.action() == EventEditorDialog.Action.SAVE && res.event() != null) {
+                    eventServiceSupplier.get().updateEvent(res.event());
+                    reload();
+                    highlightEvent(res.event().getId());
+                } else if (res.action() == EventEditorDialog.Action.DELETE) {
+                    eventServiceSupplier.get().deleteEvent(target.getId());
+                    reload();
+                }
+            } catch (DataAccessException ex) {
+                logger.error("Failed to handle event editor action: {}", res.action(), ex);
             }
         }
     }
