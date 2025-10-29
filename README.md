@@ -1,6 +1,7 @@
 Hiyori (JavaFX + SQLite)
 
 <!-- CI Status Badges -->
+[![CI (Build)](https://github.com/SilentMalachite/Hiyori/workflows/CI%20(Build)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/ci.yml)
 [![macOS PKG (jpackage)](https://github.com/SilentMalachite/Hiyori/workflows/macOS%20PKG%20(jpackage)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/macos-jpackage.yml)
 [![Windows MSI / Linux DEB-RPM (jpackage)](https://github.com/SilentMalachite/Hiyori/workflows/Windows%20MSI%20/%20Linux%20DEB-RPM%20(jpackage)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/win-linux-jpackage.yml)
 [![Release Please](https://github.com/SilentMalachite/Hiyori/workflows/Release%20Please/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/release-please.yml)
@@ -96,4 +97,32 @@ CI/環境ごとの上書き（Gradleプロパティまたは環境変数）
 開発者向け
 - 仕様は `AGENT.md` を参照
 - 貢献方法は `CONTRIBUTING.md` を参照
-- CI: GitHub Actions で Linux 上のビルド（テストはスキップ）を実行
+- CI: GitHub Actions でビルドとテストを自動実行
+
+テスト
+- テストケース数: 123個
+- テストファイル数: 17
+- カバレッジ: 約77% (17/22ソースファイル)
+- 全テストがパス（統合テスト、ユニットテスト含む）
+- JavaFX headless環境でCI実行可能
+
+テストの実行:
+```bash
+./gradlew test
+```
+
+ビルド成果物の管理
+- ビルドディレクトリのクリーンアップ:
+  ```bash
+  ./gradlew clean
+  ```
+
+- ビルドキャッシュも含めて完全クリーン:
+  ```bash
+  ./gradlew clean cleanBuildCache
+  ```
+
+- Gradle キャッシュの確認:
+  ```bash
+  du -sh ~/.gradle/caches
+  ```
