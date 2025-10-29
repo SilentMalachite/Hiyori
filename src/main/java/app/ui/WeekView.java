@@ -30,14 +30,14 @@ public class WeekView {
     private final Supplier<EventService> eventServiceSupplier;
     private final Pane root = new Pane();
     private final Canvas canvas = new Canvas();
-    private final Insets padding = new Insets(8, 8, 8, 48); // left space for time labels
+    private final AppConfig config = AppConfig.getInstance();
+    private final Insets padding; // left space for time labels
+    private final double hourHeight; // px per hour
+    private final double dayHeaderHeight;
 
     private LocalDate weekStart; // Monday
     private final ZoneId zone = ZoneId.systemDefault();
     private final List<Event> events = new ArrayList<>();
-
-    private double hourHeight = 48; // px per hour
-    private double dayHeaderHeight = 28;
 
     private boolean draggingNew = false;
     private long dragStartEpoch = 0L;
@@ -57,6 +57,16 @@ public class WeekView {
         this.eventServiceSupplier = eventServiceSupplier;
         this.weekStart = LocalDate.now().with(DayOfWeek.MONDAY);
         this.snapStepMinutes = AppConfig.getInstance().getEventSnapMinutes();
+
+        // Initialize UI constants from config
+        this.padding = new Insets(
+            config.getWeekViewPaddingTop(),
+            config.getWeekViewPaddingRight(),
+            config.getWeekViewPaddingBottom(),
+            config.getWeekViewPaddingLeft()
+        );
+        this.hourHeight = config.getWeekViewHourHeight();
+        this.dayHeaderHeight = config.getWeekViewDayHeaderHeight();
         root.getChildren().add(canvas);
         root.setMinHeight(24 * hourHeight + dayHeaderHeight + padding.getTop() + padding.getBottom());
         root.heightProperty().addListener((obs, a, b) -> layoutCanvas());
@@ -195,13 +205,13 @@ public class WeekView {
         GraphicsContext g = canvas.getGraphicsContext2D();
         double w = canvas.getWidth();
         double h = canvas.getHeight();
-        g.setFill(Color.web("#f7f7f7"));
+        g.setFill(Color.web(config.getWeekViewBackgroundColor()));
         g.fillRect(0, 0, w, h);
 
         // Colors: keep palette small
-        Color gridColor = Color.web("#e0e0e0");
-        Color hourBold = Color.web("#c8c8c8");
-        Color eventColor = Color.web("#4a90e2"); // blue
+        Color gridColor = Color.web(config.getWeekViewGridColor());
+        Color hourBold = Color.web(config.getWeekViewHourBoldColor());
+        Color eventColor = Color.web(config.getWeekViewEventColor()); // blue
 
         double contentX = padding.getLeft();
         double contentY = padding.getTop() + dayHeaderHeight;
@@ -209,7 +219,7 @@ public class WeekView {
         double contentH = 24 * hourHeight;
 
         // Day headers
-        g.setFill(Color.web("#333333"));
+        g.setFill(Color.web(config.getWeekViewTextColor()));
         for (int d = 0; d < 7; d++) {
             LocalDate date = weekStart.plusDays(d);
             String label = date.getMonthValue() + "/" + date.getDayOfMonth() + " (" + dayLabel(d) + ")";
@@ -345,7 +355,7 @@ public class WeekView {
 
     private void drawEventBox(GraphicsContext g, LayoutBox lb, Color base) {
         boolean hl = (highlightEventId != null && lb.ev.getId() == highlightEventId);
-        Color fill = hl ? Color.web("#ff9800") : base;
+        Color fill = hl ? Color.web(config.getWeekViewHighlightColor()) : base;
         g.setFill(fill);
         g.fillRoundRect(lb.x, lb.y, lb.w, lb.h, 6, 6);
         g.setFill(Color.WHITE);

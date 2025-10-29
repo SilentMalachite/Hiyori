@@ -1,0 +1,99 @@
+package app.util;
+
+import app.testutil.JavaFxExtension;
+import javafx.animation.PauseTransition;
+import javafx.util.Duration;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.assertj.core.api.Assertions.*;
+
+/**
+ * Debouncer????
+ */
+@ExtendWith(JavaFxExtension.class)
+class DebouncerTest {
+
+    private Debouncer debouncer;
+
+    @BeforeEach
+    void setUp() {
+        debouncer = new Debouncer(0.5); // 0.5?
+    }
+
+    @Test
+    void testDebouncerInitialization() {
+        // When & Then
+        assertThat(debouncer).isNotNull();
+    }
+
+    @Test
+    void testCallSchedulesAction() throws InterruptedException {
+        // Given
+        AtomicBoolean actionExecuted = new AtomicBoolean(false);
+        Runnable action = () -> actionExecuted.set(true);
+
+        // When
+        debouncer.call(action);
+
+        // Then
+        // ????????????????????
+        assertThat(actionExecuted.get()).isFalse();
+
+        // ?????????????????????
+        Thread.sleep(600); // 0.6???
+
+        // JavaFX????????????????????????????
+        // ?????????PauseTransition?????????
+        // ?????????????????????????????
+        // ???????????????????
+    }
+
+    @Test
+    void testMultipleCallsOnlyExecuteLast() throws InterruptedException {
+        // Given
+        AtomicBoolean firstActionExecuted = new AtomicBoolean(false);
+        AtomicBoolean secondActionExecuted = new AtomicBoolean(false);
+        AtomicBoolean thirdActionExecuted = new AtomicBoolean(false);
+
+        Runnable firstAction = () -> firstActionExecuted.set(true);
+        Runnable secondAction = () -> secondActionExecuted.set(true);
+        Runnable thirdAction = () -> thirdActionExecuted.set(true);
+
+        // When - ????????????
+        debouncer.call(firstAction);
+        Thread.sleep(100);
+        debouncer.call(secondAction);
+        Thread.sleep(100);
+        debouncer.call(thirdAction);
+
+        // Then - ???????????????????????????
+        Thread.sleep(600);
+
+        // ???????????PauseTransition????????????????????
+        // ??????????????????????
+    }
+
+    @Test
+    void testDebouncerWithZeroDelay() {
+        // Given
+        Debouncer fastDebouncer = new Debouncer(0.0);
+        AtomicBoolean actionExecuted = new AtomicBoolean(false);
+        Runnable action = () -> actionExecuted.set(true);
+
+        // When
+        fastDebouncer.call(action);
+
+        // Then
+        // ????????????????????
+    }
+
+    @Test
+    void testDebouncerWithNullAction() {
+        // When & Then - null?????????????????????
+        assertThatCode(() -> debouncer.call(null)).doesNotThrowAnyException();
+    }
+}

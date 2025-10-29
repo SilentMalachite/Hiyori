@@ -72,6 +72,26 @@ public class AppConfig {
         properties.setProperty("log.level", "INFO");
         properties.setProperty("log.file.max.size", "10MB");
         properties.setProperty("log.file.max.history", "30");
+
+        // WeekView設定
+        properties.setProperty("weekview.padding.top", "8");
+        properties.setProperty("weekview.padding.right", "8");
+        properties.setProperty("weekview.padding.bottom", "8");
+        properties.setProperty("weekview.padding.left", "48");
+        properties.setProperty("weekview.hour.height", "48");
+        properties.setProperty("weekview.day.header.height", "28");
+        properties.setProperty("weekview.color.background", "#f7f7f7");
+        properties.setProperty("weekview.color.grid", "#e0e0e0");
+        properties.setProperty("weekview.color.hour.bold", "#c8c8c8");
+        properties.setProperty("weekview.color.event", "#4a90e2");
+        properties.setProperty("weekview.color.text", "#333333");
+        properties.setProperty("weekview.color.highlight", "#ff9800");
+
+        // Event Editor Preset設定
+        properties.setProperty("eventeditor.preset.focus.duration.minutes", "90");
+        properties.setProperty("eventeditor.preset.focus.title", "集中 (90分)");
+        properties.setProperty("eventeditor.preset.break.duration.minutes", "30");
+        properties.setProperty("eventeditor.preset.break.title", "休憩 (30分)");
     }
 
     // UI設定
@@ -182,5 +202,71 @@ public class AppConfig {
     public void reload() {
         loadProperties();
         logger.info("Configuration reloaded");
+    }
+
+    // WeekView設定
+    public int getWeekViewPaddingTop() {
+        return getIntProperty("weekview.padding.top", 8);
+    }
+
+    public int getWeekViewPaddingRight() {
+        return getIntProperty("weekview.padding.right", 8);
+    }
+
+    public int getWeekViewPaddingBottom() {
+        return getIntProperty("weekview.padding.bottom", 8);
+    }
+
+    public int getWeekViewPaddingLeft() {
+        return getIntProperty("weekview.padding.left", 48);
+    }
+
+    public int getWeekViewHourHeight() {
+        return getIntProperty("weekview.hour.height", 48);
+    }
+
+    public int getWeekViewDayHeaderHeight() {
+        return getIntProperty("weekview.day.header.height", 28);
+    }
+
+    public String getWeekViewBackgroundColor() {
+        return getStringProperty("weekview.color.background", "#f7f7f7");
+    }
+
+    public String getWeekViewGridColor() {
+        return getStringProperty("weekview.color.grid", "#e0e0e0");
+    }
+
+    public String getWeekViewHourBoldColor() {
+        return getStringProperty("weekview.color.hour.bold", "#c8c8c8");
+    }
+
+    public String getWeekViewEventColor() {
+        return getStringProperty("weekview.color.event", "#4a90e2");
+    }
+
+    public String getWeekViewTextColor() {
+        return getStringProperty("weekview.color.text", "#333333");
+    }
+
+    public String getWeekViewHighlightColor() {
+        return getStringProperty("weekview.color.highlight", "#ff9800");
+    }
+
+    // Event Editor Preset設定
+    public int getEventEditorFocusPresetDurationMinutes() {
+        return getIntProperty("eventeditor.preset.focus.duration.minutes", 90);
+    }
+
+    public String getEventEditorFocusPresetTitle() {
+        return getStringProperty("eventeditor.preset.focus.title", "集中 (90分)");
+    }
+
+    public int getEventEditorBreakPresetDurationMinutes() {
+        return getIntProperty("eventeditor.preset.break.duration.minutes", 30);
+    }
+
+    public String getEventEditorBreakPresetTitle() {
+        return getStringProperty("eventeditor.preset.break.title", "休憩 (30分)");
     }
 }

@@ -1,5 +1,6 @@
 package app.ui;
 
+import app.config.AppConfig;
 import app.model.Event;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
@@ -16,6 +17,7 @@ public class EventEditorDialog extends Dialog<EventEditorDialog.Result> {
     public enum Action { SAVE, DELETE, CANCEL }
     public record Result(Action action, Event event) {}
 
+    private final AppConfig config = AppConfig.getInstance();
     private final ZoneId zone;
     private final Event original;
 
@@ -58,11 +60,11 @@ public class EventEditorDialog extends Dialog<EventEditorDialog.Result> {
 
         // Preset block buttons
         HBox presets = new HBox(8);
-        Button btnFocus90 = new Button("90分集中");
-        Button btnBreak30 = new Button("30分休憩");
-        btnFocus90.setOnAction(ev -> applyPreset(90, "集中 (90分)"));
-        btnBreak30.setOnAction(ev -> applyPreset(30, "休憩 (30分)"));
-        presets.getChildren().addAll(btnFocus90, btnBreak30);
+        Button btnFocus = new Button(config.getEventEditorFocusPresetTitle());
+        Button btnBreak = new Button(config.getEventEditorBreakPresetTitle());
+        btnFocus.setOnAction(ev -> applyPreset(config.getEventEditorFocusPresetDurationMinutes(), config.getEventEditorFocusPresetTitle()));
+        btnBreak.setOnAction(ev -> applyPreset(config.getEventEditorBreakPresetDurationMinutes(), config.getEventEditorBreakPresetTitle()));
+        presets.getChildren().addAll(btnFocus, btnBreak);
         gp.add(new Label("定型"), 0, row);
         gp.add(presets, 1, row++, 3, 1);
 
