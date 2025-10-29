@@ -13,6 +13,14 @@ build/
 # Build artifacts
 bin/
 
-# Local data
-data/
+# Local data - ignore database files but keep README
+data/*.db
+data/*.db-shm
+data/*.db-wal
+!data/README.md
+
+# Logs - ignore log files but keep README
+logs/*.log
+logs/*.log.*
+!logs/README.md
 

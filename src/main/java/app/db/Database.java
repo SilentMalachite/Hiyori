@@ -267,6 +267,20 @@ public class Database {
     public void close() {
         poolLock.writeLock().lock();
         try {
+            // Perform WAL checkpoint before closing to consolidate WAL file
+            try {
+                Connection conn = connectionPool.peek();
+                if (conn != null && !conn.isClosed()) {
+                    try (Statement st = conn.createStatement()) {
+                        st.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+                        logger.debug("WAL checkpoint completed");
+                    }
+                }
+            } catch (SQLException e) {
+                logger.warn("Failed to perform WAL checkpoint during shutdown", e);
+            }
+            
+            // Close all connections
             Connection conn;
             while ((conn = connectionPool.poll()) != null) {
                 try {
