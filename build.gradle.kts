@@ -17,7 +17,14 @@ tasks.withType<Test> {
     }
     
     // JVM arguments for tests
-    jvmArgs("-Dfile.encoding=UTF-8")
+    jvmArgs(
+        "-Dfile.encoding=UTF-8",
+        "-Djava.awt.headless=true",
+        "-Dtestfx.robot=glass",
+        "-Dtestfx.headless=true",
+        "-Dprism.order=sw",
+        "-Dprism.verbose=true"
+    )
     
     // Test timeout
     timeout.set(Duration.ofMinutes(5))
