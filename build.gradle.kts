@@ -56,6 +56,7 @@ javafx {
 
 application {
     mainClass.set("app.MainApp")
+    mainModule.set("hiyori")
 }
 
 tasks.named<org.gradle.api.tasks.JavaExec>("run") {
@@ -64,11 +65,9 @@ tasks.named<org.gradle.api.tasks.JavaExec>("run") {
 }
 
 jlink {
-    options = listOf("--strip-debug", "--compress=2", "--no-header-files", "--no-man-pages")
-    // Non-modular project: name the merged module
-    mergedModuleName = "hiyori.merged"
-    // Explicit module name for the application (fallback)
-    moduleName = "hiyori.merged"
+    options = listOf("--strip-debug", "--compress=zip-6", "--no-header-files", "--no-man-pages")
+    // Module name from module-info.java
+    moduleName = "hiyori"
     launcher {
         name = "Hiyori"
     }
