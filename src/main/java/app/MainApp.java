@@ -63,10 +63,12 @@ public class MainApp extends Application {
             Path logs = Path.of("logs");
             if (!Files.exists(logs)) {
                 Files.createDirectories(logs);
+                logger.debug("Created logs directory: {}", logs.toAbsolutePath());
             }
         } catch (IOException e) {
-            // ログはコンソールにも出るため致命的ではない
-            System.err.println("Failed to prepare environment: " + e.getMessage());
+            // ログディレクトリの作成に失敗してもアプリは続行可能
+            // （ログはコンソールにも出力される）
+            logger.warn("Failed to create logs directory, console logging only", e);
         }
     }
 
@@ -157,7 +159,9 @@ public class MainApp extends Application {
                 PauseTransition pt = new PauseTransition(Duration.seconds(sec));
                 pt.setOnFinished(ev -> Platform.exit());
                 pt.play();
-            } catch (NumberFormatException ignored) { }
+            } catch (NumberFormatException e) {
+                logger.warn("Invalid value for app.testExitSeconds: '{}', ignoring auto-exit", exitSec);
+            }
         }
     }
 
