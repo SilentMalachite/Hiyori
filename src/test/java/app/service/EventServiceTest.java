@@ -48,8 +48,8 @@ class EventServiceTest {
             // clearDataが失敗した場合は続行
             System.err.println("Warning: Failed to clear test data: " + e.getMessage());
         }
-        eventsDao = new EventsDao(testDb.getDatabase());
         transactionManager = new TransactionManager(testDb.getDatabase());
+        eventsDao = new EventsDao(testDb.getDatabase(), transactionManager);
         
         // Mock設定
         when(mockConfig.getSearchEventsLimit()).thenReturn(200);

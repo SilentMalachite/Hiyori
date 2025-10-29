@@ -77,8 +77,14 @@ public class MainApp extends Application {
         // Initialize database
         initDatabase();
         
-        // Initialize services
+        // Initialize transaction manager first
         transactionManager = new TransactionManager(database);
+        
+        // Initialize DAOs with transaction manager
+        notesDao = new NotesDao(database, transactionManager);
+        eventsDao = new EventsDao(database, transactionManager);
+        
+        // Initialize services
         noteService = new NoteService(notesDao, transactionManager);
         eventService = new EventService(eventsDao, transactionManager);
         
@@ -168,8 +174,6 @@ public class MainApp extends Application {
             logger.info("Initializing database at: {}", dbPath);
             database = new Database(dbPath.toString());
             database.initialize();
-            notesDao = new NotesDao(database);
-            eventsDao = new EventsDao(database);
             logger.info("Database initialization completed successfully");
         } catch (IOException e) {
             logger.error("Failed to create data directory", e);

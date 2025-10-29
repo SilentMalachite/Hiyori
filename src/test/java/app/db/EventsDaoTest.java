@@ -35,7 +35,8 @@ class EventsDaoTest {
             // clearDataが失敗した場合は続行
             System.err.println("Warning: Failed to clear test data: " + e.getMessage());
         }
-        eventsDao = new EventsDao(testDb.getDatabase());
+        TransactionManager tm = new TransactionManager(testDb.getDatabase());
+        eventsDao = new EventsDao(testDb.getDatabase(), tm);
     }
 
     @AfterEach
@@ -307,5 +308,23 @@ class EventsDaoTest {
         assertThat(events.get(0).getTitle()).isEqualTo("予定1");
         assertThat(events.get(1).getTitle()).isEqualTo("予定2");
         assertThat(events.get(2).getTitle()).isEqualTo("予定3");
+    }
+
+    @Test
+    @Order(16)
+    @DisplayName("LIKE検索でワイルドカード文字を含むタイトルを正しく検索できる")
+    void testSearchByTitleWithLiteralWildcards() throws DataAccessException {
+        long baseEpoch = LocalDateTime.now().withHour(9).withMinute(0).withSecond(0).withNano(0)
+                .atZone(ZoneId.systemDefault()).toEpochSecond();
+
+        eventsDao.insert("達成率100%", baseEpoch, baseEpoch + 3600);
+        eventsDao.insert("タスク_A_レビュー", baseEpoch + 3600, baseEpoch + 7200);
+        eventsDao.insert("通常予定", baseEpoch + 7200, baseEpoch + 10800);
+
+        List<Event> percentResults = eventsDao.searchByTitle("100%", 10);
+        List<Event> underscoreResults = eventsDao.searchByTitle("タスク_A_", 10);
+
+        assertThat(percentResults).extracting(Event::getTitle).containsExactly("達成率100%");
+        assertThat(underscoreResults).extracting(Event::getTitle).containsExactly("タスク_A_レビュー");
     }
 }

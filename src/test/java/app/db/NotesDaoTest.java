@@ -8,7 +8,9 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
@@ -33,7 +35,8 @@ class NotesDaoTest {
             // clearDataが失敗した場合は続行
             System.err.println("Warning: Failed to clear test data: " + e.getMessage());
         }
-        notesDao = new NotesDao(testDb.getDatabase());
+        TransactionManager tm = new TransactionManager(testDb.getDatabase());
+        notesDao = new NotesDao(testDb.getDatabase(), tm);
     }
 
     @AfterEach
@@ -283,5 +286,33 @@ class NotesDaoTest {
 
         // Then
         assertThat(limitedResults).hasSizeLessThanOrEqualTo(3);
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("LIKEフォールバックでワイルドカード文字を含むタイトルを検索できる")
+    void testFallbackLikeSearchHandlesWildcards() throws Exception {
+        Note percentNote = TestDataFactory.createNote("進捗率100%", "詳細");
+        Note underscoreNote = TestDataFactory.createNote("タスク_A_メモ", "詳細");
+        notesDao.insert(percentNote);
+        notesDao.insert(underscoreNote);
+
+        Connection conn = null;
+        try {
+            conn = testDb.getDatabase().getConnection();
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("DELETE FROM notes_fts");
+            }
+        } finally {
+            if (conn != null) {
+                testDb.getDatabase().releaseConnection(conn);
+            }
+        }
+
+        List<Note> percentResults = notesDao.searchNotes("100%", 10);
+        List<Note> underscoreResults = notesDao.searchNotes("タスク_A_", 10);
+
+        assertThat(percentResults).extracting(Note::getTitle).containsExactly("進捗率100%");
+        assertThat(underscoreResults).extracting(Note::getTitle).containsExactly("タスク_A_メモ");
     }
 }

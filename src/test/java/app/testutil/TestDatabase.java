@@ -33,14 +33,14 @@ public class TestDatabase {
         return database;
     }
 
-    public Connection getConnection() {
+    public Connection getConnection() throws DatabaseException {
         return database.getConnection();
     }
 
     /**
      * テストデータをクリアする
      */
-    public void clearData() throws SQLException {
+    public void clearData() throws SQLException, DatabaseException {
         Connection conn = null;
         Statement stmt = null;
         try {
@@ -82,7 +82,7 @@ public class TestDatabase {
     /**
      * テスト用のサンプルデータを挿入する
      */
-    public void insertSampleData() throws SQLException {
+    public void insertSampleData() throws SQLException, DatabaseException {
         Connection conn = getConnection();
         try (Statement stmt = conn.createStatement()) {
             
@@ -111,9 +111,7 @@ public class TestDatabase {
      */
     public void close() {
         try {
-            if (database != null && database.getConnection() != null && !database.getConnection().isClosed()) {
-                database.getConnection().close();
-            }
+            database.close();
             // テスト用ファイルを削除
             Files.deleteIfExists(dbPath);
             Files.deleteIfExists(dbPath.getParent());
@@ -126,7 +124,7 @@ public class TestDatabase {
     /**
      * テスト用のデータベース統計を取得
      */
-    public DatabaseStats getStats() throws SQLException {
+    public DatabaseStats getStats() throws SQLException, DatabaseException {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             

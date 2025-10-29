@@ -48,9 +48,9 @@ class DatabaseIntegrationTest {
             System.err.println("Warning: Failed to clear test data: " + e.getMessage());
         }
         database = testDb.getDatabase();
-        notesDao = new NotesDao(database);
-        eventsDao = new EventsDao(database);
         transactionManager = new TransactionManager(database);
+        notesDao = new NotesDao(database, transactionManager);
+        eventsDao = new EventsDao(database, transactionManager);
         noteService = new NoteService(notesDao, transactionManager);
         eventService = new EventService(eventsDao, transactionManager);
     }
@@ -252,16 +252,23 @@ class DatabaseIntegrationTest {
         // When - トランザクション内でエラーが発生する操作を実行
         assertThatThrownBy(() -> {
             transactionManager.executeInTransaction(() -> {
-                // 正常な操作
-                Note note = noteService.createNote("新しいメモ", "新しい内容");
+                // 正常な操作 - DAOを直接使用してサービスの二重トランザクションを回避
+                Note note = new Note();
+                note.setTitle("新しいメモ");
+                note.setBody("新しい内容");
+                long now = java.time.Instant.now().getEpochSecond();
+                note.setCreatedAt(now);
+                note.setUpdatedAt(now);
+                long noteId = notesDao.insert(note);
+                note.setId(noteId);
                 
-                // エラーを発生させる操作
+                // エラーを発生させる操作 - DAOを直接使用
                 Event invalidEvent = new Event();
                 invalidEvent.setId(999L); // 存在しないID
                 invalidEvent.setTitle("無効な予定");
                 invalidEvent.setStartEpochSec(0);
                 invalidEvent.setEndEpochSec(3600);
-                eventService.updateEvent(invalidEvent); // これでエラーが発生
+                eventsDao.update(invalidEvent); // これでエラーが発生
                 
                 return null;
             });

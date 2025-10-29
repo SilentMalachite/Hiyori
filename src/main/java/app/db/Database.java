@@ -6,39 +6,234 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Database {
     private static final Logger logger = LoggerFactory.getLogger(Database.class);
     private final String url;
-    private Connection conn;
     private final int busyTimeoutMs;
+    private final int maxPoolSize;
+    private final BlockingQueue<Connection> connectionPool;
+    private final AtomicBoolean isInitialized = new AtomicBoolean(false);
+    private final ReentrantReadWriteLock poolLock = new ReentrantReadWriteLock();
 
     public Database(String path) {
         this.url = "jdbc:sqlite:" + path;
         this.busyTimeoutMs = AppConfig.getInstance().getDatabaseConnectionTimeoutMs();
+        this.maxPoolSize = Math.max(2, Runtime.getRuntime().availableProcessors());
+        this.connectionPool = new LinkedBlockingQueue<>(maxPoolSize);
     }
 
     public void initialize() throws DatabaseException {
-        try {
-            logger.info("Initializing database connection to: {}", url);
-            conn = DriverManager.getConnection(url);
-            try (Statement st = conn.createStatement()) {
-                st.execute("PRAGMA foreign_keys=ON");
-                st.execute("PRAGMA journal_mode=WAL");
-                st.execute("PRAGMA synchronous=NORMAL");
-                st.execute("PRAGMA busy_timeout=" + busyTimeoutMs);
+        if (isInitialized.compareAndSet(false, true)) {
+            synchronized (this) {
+                // Double-check pattern to prevent race conditions
+                if (connectionPool.size() > 0) {
+                    logger.info("Database already initialized");
+                    return;
+                }
+                
+                try {
+                    logger.info("Initializing database connection pool to: {} (size: {})", url, maxPoolSize);
+                    
+                    // Initialize pool with connections
+                    int createdConnections = 0;
+                    for (int i = 0; i < maxPoolSize; i++) {
+                        try {
+                            Connection conn = createConnection();
+                            if (connectionPool.offer(conn)) {
+                                createdConnections++;
+                            } else {
+                                conn.close();
+                                logger.warn("Connection pool full during initialization, closing excess connection");
+                            }
+                        } catch (SQLException e) {
+                            logger.error("Failed to create connection {} during initialization", i, e);
+                            // Continue trying to create other connections
+                        }
+                    }
+                    
+                    if (createdConnections == 0) {
+                        throw new DatabaseException("Failed to create any database connections during initialization");
+                    }
+                    
+                    // Create schema using one connection from pool
+                    Connection schemaConn = getConnection();
+                    try {
+                        createSchema(schemaConn);
+                    } finally {
+                        releaseConnection(schemaConn);
+                    }
+                    
+                    logger.info("Database initialized successfully with {} connections", createdConnections);
+                } catch (Exception e) {
+                    logger.error("Failed to initialize database", e);
+                    close();
+                    isInitialized.set(false); // Reset for retry
+                    throw new DatabaseException("データベースの初期化に失敗しました", e);
+                }
             }
-            createSchema();
-            logger.info("Database initialized successfully");
-        } catch (SQLException e) {
-            logger.error("Failed to initialize database", e);
-            throw new DatabaseException("データベースの初期化に失敗しました", e);
         }
     }
 
-    public Connection getConnection() { return conn; }
+    public Connection getConnection() throws DatabaseException {
+        if (!isInitialized.get()) {
+            throw new DatabaseException("Database not initialized");
+        }
+        
+        try {
+            while (true) {
+                Connection conn = connectionPool.poll(5, TimeUnit.SECONDS);
+                if (conn == null) {
+                    throw new DatabaseException("Connection pool exhausted - timeout waiting for connection");
+                }
+                
+                // Validate connection
+                try {
+                    if (conn.isClosed()) {
+                        logger.warn("Closed connection found in pool, creating new one");
+                        conn = createConnection();
+                        return conn;
+                    }
+                    
+                    // Additional validation - test connection with simple query
+                    if (!isConnectionValid(conn)) {
+                        logger.warn("Invalid connection found in pool, creating new one");
+                        try {
+                            conn.close();
+                        } catch (SQLException e) {
+                            logger.warn("Failed to close invalid connection", e);
+                        }
+                        conn = createConnection();
+                        return conn;
+                    }
+                    
+                    return conn;
+                } catch (SQLException e) {
+                    // If validation fails with SQLException, try to get another connection
+                    logger.warn("Connection validation failed, trying next connection", e);
+                    try {
+                        conn.close();
+                    } catch (SQLException closeEx) {
+                        logger.debug("Failed to close invalid connection", closeEx);
+                    }
+                    // Continue loop to get next connection
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new DatabaseException("Interrupted while waiting for database connection", e);
+        }
+    }
 
-    private void createSchema() throws SQLException {
+    public void releaseConnection(Connection conn) {
+        if (conn != null) {
+            boolean needsReplacement = false;
+            boolean shouldOffer = false;
+            synchronized (conn) {
+                try {
+                    if (conn.isClosed()) {
+                        logger.debug("Attempted to release closed connection");
+                        needsReplacement = true;
+                    } else {
+                        resetConnection(conn);
+                        shouldOffer = true;
+                    }
+                } catch (SQLException e) {
+                    logger.warn("Failed to release connection", e);
+                    try {
+                        conn.close();
+                    } catch (SQLException closeEx) {
+                        logger.warn("Failed to close connection during release", closeEx);
+                    }
+                    needsReplacement = true;
+                    shouldOffer = false;
+                }
+
+                if (shouldOffer) {
+                    if (!connectionPool.offer(conn)) {
+                        try {
+                            conn.close();
+                        } catch (SQLException e) {
+                            logger.warn("Failed to close connection when pool full", e);
+                        }
+                        logger.debug("Connection pool full, closed excess connection");
+                    }
+                }
+            }
+
+            if (needsReplacement) {
+                try {
+                    Connection replacement = createConnection();
+                    if (!connectionPool.offer(replacement)) {
+                        replacement.close();
+                        logger.debug("Connection pool full while adding replacement, closed connection");
+                    }
+                } catch (SQLException e) {
+                    logger.warn("Failed to create replacement connection", e);
+                }
+            }
+        }
+    }
+
+    private Connection createConnection() throws SQLException {
+        Connection conn = DriverManager.getConnection(url);
+        try (Statement st = conn.createStatement()) {
+            st.execute("PRAGMA foreign_keys=ON");
+            st.execute("PRAGMA journal_mode=WAL");
+            st.execute("PRAGMA synchronous=NORMAL");
+            st.execute("PRAGMA busy_timeout=" + busyTimeoutMs);
+        }
+        return conn;
+    }
+
+    private boolean isConnectionValid(Connection conn) {
+        try {
+            // Simple validation query - SQLite specific
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT 1")) {
+                return rs.next() && rs.getInt(1) == 1;
+            }
+        } catch (SQLException e) {
+            logger.debug("Connection validation failed", e);
+            return false;
+        }
+    }
+
+    private void resetConnection(Connection conn) throws SQLException {
+        // Reset connection state for reuse
+        try {
+            if (!conn.getAutoCommit()) {
+                // For SQLite, just rollback and set auto-commit
+                conn.rollback();
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            // If rollback fails, try to force auto-commit on
+            try {
+                conn.setAutoCommit(true);
+            } catch (SQLException autoCommitEx) {
+                // If both fail, close the connection - it's corrupted
+                logger.warn("Failed to reset connection state, connection will be discarded", autoCommitEx);
+                conn.close();
+                throw autoCommitEx;
+            }
+            throw e;
+        }
+        
+        // Clear any pending warnings
+        try {
+            conn.clearWarnings();
+        } catch (SQLException e) {
+            logger.debug("Failed to clear connection warnings", e);
+        }
+    }
+
+    private void createSchema(Connection conn) throws SQLException {
         logger.debug("Creating database schema");
         try (Statement st = conn.createStatement()) {
             st.executeUpdate("CREATE TABLE IF NOT EXISTS notes (" +
@@ -69,9 +264,23 @@ public class Database {
         }
     }
 
-    public void close() throws SQLException {
-        if (conn != null && !conn.isClosed()) {
-            conn.close();
+    public void close() {
+        poolLock.writeLock().lock();
+        try {
+            Connection conn;
+            while ((conn = connectionPool.poll()) != null) {
+                try {
+                    if (!conn.isClosed()) {
+                        conn.close();
+                    }
+                } catch (SQLException e) {
+                    logger.warn("Failed to close connection during shutdown", e);
+                }
+            }
+            isInitialized.set(false);
+            logger.info("Database connection pool closed");
+        } finally {
+            poolLock.writeLock().unlock();
         }
     }
 }

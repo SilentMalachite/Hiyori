@@ -6,6 +6,12 @@ build/
 .idea/
 *.iml
 .vscode/
+.classpath
+.project
+.settings/
+
+# Build artifacts
+bin/
 
 # Local data
 data/

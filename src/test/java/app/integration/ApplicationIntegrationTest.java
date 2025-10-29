@@ -50,9 +50,9 @@ class ApplicationIntegrationTest {
             System.err.println("Warning: Failed to clear test data: " + e.getMessage());
         }
         database = testDb.getDatabase();
-        notesDao = new NotesDao(database);
-        eventsDao = new EventsDao(database);
         transactionManager = new TransactionManager(database);
+        notesDao = new NotesDao(database, transactionManager);
+        eventsDao = new EventsDao(database, transactionManager);
         noteService = new NoteService(notesDao, transactionManager);
         eventService = new EventService(eventsDao, transactionManager);
         config = AppConfig.getInstance();
@@ -192,9 +192,9 @@ class ApplicationIntegrationTest {
         Event event = eventService.createEventFromNow("永続化テスト予定");
 
         // When - 新しいサービスインスタンスを作成（データベースは同じ）
-        NotesDao newNotesDao = new NotesDao(database);
-        EventsDao newEventsDao = new EventsDao(database);
         TransactionManager newTransactionManager = new TransactionManager(database);
+        NotesDao newNotesDao = new NotesDao(database, newTransactionManager);
+        EventsDao newEventsDao = new EventsDao(database, newTransactionManager);
         NoteService newNoteService = new NoteService(newNotesDao, newTransactionManager);
         EventService newEventService = new EventService(newEventsDao, newTransactionManager);
 

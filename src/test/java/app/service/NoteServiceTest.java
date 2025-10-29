@@ -47,8 +47,8 @@ class NoteServiceTest {
             // clearDataが失敗した場合は続行
             System.err.println("Warning: Failed to clear test data: " + e.getMessage());
         }
-        notesDao = new NotesDao(testDb.getDatabase());
         transactionManager = new TransactionManager(testDb.getDatabase());
+        notesDao = new NotesDao(testDb.getDatabase(), transactionManager);
         
         // Mock設定
         when(mockConfig.getNotesListMaxItems()).thenReturn(500);
