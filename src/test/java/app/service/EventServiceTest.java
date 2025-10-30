@@ -393,4 +393,75 @@ class EventServiceTest {
         assertThat(event).isNotNull();
         assertThat(event.getEndEpochSec() - event.getStartEpochSec()).isEqualTo(300);
     }
+
+    @Test
+    @Order(21)
+    @DisplayName("存在しないIDの削除は DataAccessException を投げる")
+    void testDeleteNonExistentEventThrows() {
+        // Given - データベースに存在しないIDを指定
+        long nonExistentId = 999999L;
+
+        // When & Then
+        assertThatThrownBy(() -> eventService.deleteEvent(nonExistentId))
+            .isInstanceOf(DataAccessException.class)
+            .hasMessageContaining("削除対象の予定が見つかりません");
+    }
+
+    @Test
+    @Order(22)
+    @DisplayName("updateEvent: 最小時間未満に変更すると IllegalArgumentException")
+    void testUpdateEventTooShortDurationThrows() throws DataAccessException {
+        // Given - まず有効な予定を作成
+        Event event = eventService.createEventFromNow("短時間更新テスト");
+        // 最小時間(既定5分)未満に短縮
+        long newStart = event.getStartEpochSec();
+        long newEnd = newStart + 60; // 1分
+        event.setStartEpochSec(newStart);
+        event.setEndEpochSec(newEnd);
+
+        // When & Then
+        assertThatThrownBy(() -> eventService.updateEvent(event))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Event duration must be at least");
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("searchEventsByTitle: 前後空白はtrimされ、search.events.limitが適用される")
+    void testSearchEventsTrimAndLimit() throws DataAccessException {
+        // Given - limitを3に設定
+        AppConfig.getInstance().setProperty("search.events.limit", "3");
+
+        // 同一キーワードで複数件登録
+        long base = LocalDateTime.now().withHour(9).withMinute(0).withSecond(0).withNano(0)
+                .atZone(ZoneId.systemDefault()).toEpochSecond();
+        for (int i = 0; i < 5; i++) {
+            eventsDao.insert("限界テスト" + i, base + i * 3600, base + (i + 1) * 3600);
+        }
+
+        // When - 前後に空白付きクエリで検索
+        List<Event> results = eventService.searchEventsByTitle("   限界テスト   ");
+
+        // Then - trimによりヒットし、limitにより3件以内
+        assertThat(results.size()).isLessThanOrEqualTo(3);
+        assertThat(results).allMatch(e -> e.getTitle().startsWith("限界テスト"));
+    }
+
+    @Test
+    @Order(24)
+    @DisplayName("createEventFromNow: event.default.duration.minutes の設定を尊重する")
+    void testCreateEventFromNowRespectsConfigDuration() throws DataAccessException {
+        // Given - 既定の90分とは異なる値に変更
+        AppConfig.getInstance().setProperty("event.default.duration.minutes", "45");
+
+        // When
+        Event e = eventService.createEventFromNow("デフォルト時間変更テスト");
+
+        // Then
+        long durationSec = e.getEndEpochSec() - e.getStartEpochSec();
+        assertThat(durationSec).isEqualTo(45 * 60);
+
+        // 後続テストに影響させないため、元に戻す
+        AppConfig.getInstance().setProperty("event.default.duration.minutes", "90");
+    }
 }

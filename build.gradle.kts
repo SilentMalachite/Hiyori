@@ -23,14 +23,17 @@ tasks.withType<Test> {
         "-Dtestfx.robot=glass",
         "-Dtestfx.headless=true",
         "-Dprism.order=sw",
-        "-Dprism.verbose=true"
+        "-Dprism.verbose=false"
     )
     
     // Test timeout
     timeout.set(Duration.ofMinutes(5))
     
-    // Parallel execution
-    maxParallelForks = Runtime.getRuntime().availableProcessors()
+    // Parallel execution (default=2, override with -Ptest.maxParallelForks or ENV TEST_MAX_PARALLEL_FORKS)
+    val forksProp = (project.findProperty("test.maxParallelForks") as String?)?.toIntOrNull()
+    val forksEnv = System.getenv("TEST_MAX_PARALLEL_FORKS")?.toIntOrNull()
+    val resolvedForks = listOfNotNull(forksProp, forksEnv).firstOrNull() ?: 2
+    maxParallelForks = if (resolvedForks < 1) 1 else resolvedForks
 }
 
 repositories {
@@ -47,10 +50,10 @@ dependencies {
     // SQLite JDBC driver - updated to latest stable
     implementation("org.xerial:sqlite-jdbc:3.47.0.0")
     
-    // SLF4J - updated to latest stable
-    // Note: Using implementation because code references SLF4J directly
+    // SLF4J + Logback (実装)
+    // API は implementation、実装は runtimeOnly で解決（logback.xml を利用）
     implementation("org.slf4j:slf4j-api:2.0.16")
-    runtimeOnly("org.slf4j:slf4j-nop:2.0.16")
+    runtimeOnly("ch.qos.logback:logback-classic:1.5.12")
     
     // Testing dependencies - updated to latest stable versions
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")

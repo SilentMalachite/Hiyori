@@ -20,11 +20,40 @@ public class Database {
     private final BlockingQueue<Connection> connectionPool;
     private final AtomicBoolean isInitialized = new AtomicBoolean(false);
     private final ReentrantReadWriteLock poolLock = new ReentrantReadWriteLock();
+    private final AtomicBoolean closing = new AtomicBoolean(false);
+
+    private int resolvePoolSize() {
+        final int defaultSize = 4; // conservative default for local/CI
+        final int maxCap = 16;     // avoid accidental explosion
+        Integer override = null;
+        String prop = System.getProperty("db.pool.size");
+        if (prop != null && !prop.isBlank()) {
+            try {
+                override = Integer.parseInt(prop.trim());
+            } catch (NumberFormatException e) {
+                logger.debug("Invalid system property db.pool.size='{}' — falling back to default", prop);
+            }
+        }
+        if (override == null) {
+            String env = System.getenv("DB_POOL_SIZE");
+            if (env != null && !env.isBlank()) {
+                try {
+                    override = Integer.parseInt(env.trim());
+                } catch (NumberFormatException e) {
+                    logger.debug("Invalid env DB_POOL_SIZE='{}' — falling back to default", env);
+                }
+            }
+        }
+        int resolved = override != null ? override : defaultSize;
+        if (resolved < 1) resolved = 1;
+        if (resolved > maxCap) resolved = maxCap;
+        return resolved;
+    }
 
     public Database(String path) {
         this.url = "jdbc:sqlite:" + path;
         this.busyTimeoutMs = AppConfig.getInstance().getDatabaseConnectionTimeoutMs();
-        this.maxPoolSize = Math.max(2, Runtime.getRuntime().availableProcessors());
+        this.maxPoolSize = resolvePoolSize();
         this.connectionPool = new LinkedBlockingQueue<>(maxPoolSize);
     }
 
@@ -84,8 +113,14 @@ public class Database {
         if (!isInitialized.get()) {
             throw new DatabaseException("Database not initialized");
         }
-        
+        if (closing.get()) {
+            throw new DatabaseException("Database is closing");
+        }
+        poolLock.readLock().lock();
         try {
+            if (!isInitialized.get() || closing.get()) {
+                throw new DatabaseException("Database not available");
+            }
             while (true) {
                 Connection conn = connectionPool.poll(5, TimeUnit.SECONDS);
                 if (conn == null) {
@@ -127,11 +162,23 @@ public class Database {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new DatabaseException("Interrupted while waiting for database connection", e);
+        } finally {
+            poolLock.readLock().unlock();
         }
     }
 
     public void releaseConnection(Connection conn) {
         if (conn != null) {
+            // If database is closing or not initialized, do not return connections to pool
+            if (closing.get() || !isInitialized.get()) {
+                try {
+                    if (!conn.isClosed()) conn.close();
+                } catch (SQLException e) {
+                    logger.warn("Failed to close connection during shutdown/release", e);
+                }
+                return;
+            }
+
             boolean needsReplacement = false;
             boolean shouldOffer = false;
             synchronized (conn) {
@@ -166,7 +213,7 @@ public class Database {
                 }
             }
 
-            if (needsReplacement) {
+            if (needsReplacement && isInitialized.get() && !closing.get()) {
                 try {
                     Connection replacement = createConnection();
                     if (!connectionPool.offer(replacement)) {
@@ -267,6 +314,10 @@ public class Database {
     public void close() {
         poolLock.writeLock().lock();
         try {
+            if (!isInitialized.get() && connectionPool.isEmpty()) {
+                return;
+            }
+            closing.set(true);
             // Perform WAL checkpoint before closing to consolidate WAL file
             try {
                 Connection conn = connectionPool.peek();
@@ -294,6 +345,7 @@ public class Database {
             isInitialized.set(false);
             logger.info("Database connection pool closed");
         } finally {
+            closing.set(false);
             poolLock.writeLock().unlock();
         }
     }

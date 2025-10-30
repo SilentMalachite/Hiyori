@@ -152,7 +152,6 @@ class NotesDaoTest {
     @Test
     @Order(7)
     @DisplayName("メモ検索が正常に動作する")
-    @Disabled("FTS検索の問題を調査中 - 後で修正予定")
     void testSearchNotes() throws DataAccessException {
         // Given - 直接FTSテーブルにデータを挿入してテスト
         Note javaNote = TestDataFactory.createNote("Javaプログラミング", "Javaでアプリケーションを開発する方法について");

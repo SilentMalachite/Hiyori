@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: セキュリティ脆弱性の報告（非公開）
+    url: https://github.com/SilentMalachite/Hiyori/security/advisories/new
+    about: 公開Issueではなく、GitHubのSecurity Advisoriesから非公開で報告してください。

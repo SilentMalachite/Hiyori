@@ -35,9 +35,17 @@ public class NoteService {
      */
     public List<Note> getRecentNotes() throws DataAccessException {
         logger.debug("Getting recent notes");
-        return transactionManager.executeInReadOnlyTransaction(() -> {
-            return notesDao.listRecent(0);
-        });
+        return transactionManager.executeInReadOnlyTransaction(() -> notesDao.listRecent(0));
+    }
+
+    /**
+     * 最近のメモ一覧を取得する（上限指定）
+     * @param limit 取得上限（0以下で無制限）
+     */
+    public List<Note> getRecentNotesWithLimit(int limit) throws DataAccessException {
+        int effectiveLimit = limit > 0 ? limit : 0;
+        logger.debug("Getting recent notes with limit: {}", effectiveLimit);
+        return transactionManager.executeInReadOnlyTransaction(() -> notesDao.listRecent(effectiveLimit));
     }
 
     /**

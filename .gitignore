@@ -1,26 +1,37 @@
-# Gradle
-.gradle/
-build/
+# Build outputs
+/build/
+/out/
+/bin/
+/.gradle/
+/gradle-build/
 
 # IDE
-.idea/
+/.idea/
 *.iml
-.vscode/
-.classpath
-.project
-.settings/
+*.ipr
+*.iws
 
-# Build artifacts
-bin/
+# OS files
+.DS_Store
+Thumbs.db
 
-# Local data - ignore database files but keep README
-data/*.db
-data/*.db-shm
-data/*.db-wal
+# Logs
+/logs/
+!logs/README.md
+*.log
+
+# Local databases and data
+/data/*.db
 !data/README.md
 
-# Logs - ignore log files but keep README
-logs/*.log
-logs/*.log.*
-!logs/README.md
+# Packaging artifacts
+*.dmg
+*.pkg
+*.exe
+*.msi
+*.deb
+*.rpm
 
+# JVM crash logs
+hs_err_pid*
+replay_pid*

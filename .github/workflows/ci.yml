@@ -1,44 +1,59 @@
-name: CI (Build)
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch: {}
+    branches: [ main, master ]
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 21
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+          cache: 'gradle'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
 
-      - name: Install Xvfb for headless JavaFX tests
+      - name: Grant execute permission for Gradle Wrapper
+        run: chmod +x ./gradlew
+
+      - name: Build and Test (headless JavaFX)
+        env:
+          TEST_MAX_PARALLEL_FORKS: '2'
+          DB_POOL_SIZE: '4'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libgl1 libgtk-3-0
+          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
+            ./gradlew --no-daemon clean build test -Djava.awt.headless=true -Dhiyori.headless=true
 
-      - name: Build and Test
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" \
-            ./gradlew --no-daemon build
-
-      - name: Upload Test Reports
-        if: failure()
+      - name: Archive test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: build/reports/tests/
-          retention-days: 7
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
 
+      - name: Create runtime image (jlink) (optional)
+        if: github.event_name != 'pull_request'
+        run: |
+          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
+            ./gradlew --no-daemon jlink
+
+      - name: Upload image artifact
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-image
+          path: build/image/**

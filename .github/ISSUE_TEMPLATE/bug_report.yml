@@ -1,0 +1,62 @@
+name: バグ報告
+description: 不具合の報告はこちら
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        可能な限り再現手順とログを添付してください。セキュリティ関連の脆弱性は公開Issueではなく、`Security Advisories` から報告してください。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何が起きましたか？期待する動作は？
+      placeholder: 例）メモ作成後に保存されない
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: ステップバイステップで記述してください
+      placeholder: |
+        1. アプリを起動する
+        2. タイトルを入力し…
+        3. 保存ボタンを押す
+        4. エラーが表示される
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ/スクリーンショット
+      description: `logs/hiyori.log` の該当部分やコンソール出力を貼り付け、必要ならスクリーンショットを添付
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: バージョン/コミット
+      description: リリースバージョンまたはコミットSHA
+      placeholder: v1.0.0 or abcdef1
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Windows
+        - Linux
+  - type: input
+    id: java
+    attributes:
+      label: Javaバージョン
+      placeholder: e.g. Temurin 21.0.3
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認事項
+      options:
+        - label: 最新の `main` または最新リリースで再現する
+          required: true
+        - label: 既存の Issue を検索済み
+          required: true

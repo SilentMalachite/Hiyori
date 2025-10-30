@@ -1,0 +1,29 @@
+name: 機能要望
+description: 新機能や改善の提案はこちら
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい課題/背景
+      description: どんな課題を解決したいですか？
+      placeholder: 例）大量のメモから目的のものを見つけづらい
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案内容
+      description: 望ましい解決策、UI/UX のイメージ、シナリオなど
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 代替案
+      description: 検討した別案があれば記載
+  - type: textarea
+    id: additional
+    attributes:
+      label: 追加情報
+      description: モック、参考資料、関連Issue など

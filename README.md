@@ -1,10 +1,9 @@
 Hiyori (JavaFX + SQLite)
 
-<!-- CI Status Badges -->
-[![CI (Build)](https://github.com/SilentMalachite/Hiyori/workflows/CI%20(Build)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/ci.yml)
-[![macOS PKG (jpackage)](https://github.com/SilentMalachite/Hiyori/workflows/macOS%20PKG%20(jpackage)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/macos-jpackage.yml)
-[![Windows MSI / Linux DEB-RPM (jpackage)](https://github.com/SilentMalachite/Hiyori/workflows/Windows%20MSI%20/%20Linux%20DEB-RPM%20(jpackage)/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/win-linux-jpackage.yml)
-[![Release Please](https://github.com/SilentMalachite/Hiyori/workflows/Release%20Please/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/release-please.yml)
+<!-- Badges -->
+[![CI](https://github.com/SilentMalachite/Hiyori/actions/workflows/ci.yml/badge.svg)](https://github.com/SilentMalachite/Hiyori/actions/workflows/ci.yml)
+![JDK](https://img.shields.io/badge/JDK-21-blue)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE)
 
 概要
 - Java 21 + JavaFX によるローカル専用「メモ + スケジュール」アプリ。
@@ -126,3 +125,13 @@ CI/環境ごとの上書き（Gradleプロパティまたは環境変数）
   ```bash
   du -sh ~/.gradle/caches
   ```
+
+
+---
+
+## ライセンスとポリシー
+- ライセンス: Apache-2.0（詳細は `LICENSE` を参照）
+- 行動規範: `CODE_OF_CONDUCT.md`（Contributor Covenant v2.1）
+- セキュリティ: 脆弱性は `SECURITY.md` を参照のうえ、GitHub Security Advisories から非公開で報告してください
+- サポート: 問い合わせ・バグ報告・機能要望の流れは `SUPPORT.md` を参照
+- 貢献方法: `CONTRIBUTING.md` を参照

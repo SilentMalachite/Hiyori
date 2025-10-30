@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * メイン画面のUI制御を担当するコントローラー
@@ -165,31 +166,45 @@ public class MainController {
             return;
         }
 
-        try {
-            logger.debug("Performing global search for: '{}'", query);
-            List<Note> foundNotes = noteService.searchNotes(query);
-            List<Event> foundEvents = eventService.searchEventsByTitle(query);
+        logger.debug("Performing global search for: '{}'", query);
+        CompletableFuture<List<Note>> notesFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return noteService.searchNotes(query);
+            } catch (DataAccessException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        CompletableFuture<List<Event>> eventsFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return eventService.searchEventsByTitle(query);
+            } catch (DataAccessException e) {
+                throw new RuntimeException(e);
+            }
+        });
 
-            foundNotes = limitList(foundNotes, config.getSearchNotesLimit());
-            foundEvents = limitList(foundEvents, config.getSearchEventsLimit());
-            
-            items.clear();
-            for (Note note : foundNotes) {
-                items.add(new NoteItem(note));
-            }
-            for (Event event : foundEvents) {
-                items.add(new EventItem(event));
-            }
-            
-            if (!items.isEmpty()) {
-                notesList.getSelectionModel().selectFirst();
-            }
-            
-            logger.debug("Search completed: {} notes, {} events found", foundNotes.size(), foundEvents.size());
-        } catch (DataAccessException e) {
-            logger.error("Search failed for query: '{}'", query, e);
-            showError("検索に失敗しました", e.getMessage());
-        }
+        notesFuture.thenCombine(eventsFuture, (foundNotes, foundEvents) -> {
+            List<Note> limitedNotes = limitList(foundNotes, config.getSearchNotesLimit());
+            List<Event> limitedEvents = limitList(foundEvents, config.getSearchEventsLimit());
+            Platform.runLater(() -> {
+                items.clear();
+                for (Note note : limitedNotes) {
+                    items.add(new NoteItem(note));
+                }
+                for (Event event : limitedEvents) {
+                    items.add(new EventItem(event));
+                }
+                if (!items.isEmpty()) {
+                    notesList.getSelectionModel().selectFirst();
+                }
+                logger.debug("Search completed: {} notes, {} events found", limitedNotes.size(), limitedEvents.size());
+            });
+            return null;
+        }).exceptionally(ex -> {
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            logger.error("Search failed for query: '{}'", query, cause);
+            Platform.runLater(() -> showError("検索に失敗しました", cause.getMessage()));
+            return null;
+        });
     }
 
     private static <T> List<T> limitList(List<T> source, int limit) {
@@ -200,18 +215,22 @@ public class MainController {
     }
 
     private void reloadNotes() {
-        try {
-            List<Note> notes = noteService.getRecentNotes();
-            int maxItems = config.getNotesListMaxItems();
-            if (maxItems > 0 && notes.size() > maxItems) {
-                notes = notes.subList(0, maxItems);
+        int maxItems = config.getNotesListMaxItems();
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return noteService.getRecentNotesWithLimit(maxItems);
+            } catch (DataAccessException e) {
+                throw new RuntimeException(e);
             }
+        }).thenAccept(notes -> Platform.runLater(() -> {
             items.setAll(notes.stream().map(NoteItem::new).toList());
             logger.debug("Reloaded {} notes", notes.size());
-        } catch (DataAccessException e) {
-            logger.error("Failed to reload notes", e);
-            showError("メモの読み込みに失敗しました", e.getMessage());
-        }
+        })).exceptionally(ex -> {
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            logger.error("Failed to reload notes", cause);
+            Platform.runLater(() -> showError("メモの読み込みに失敗しました", cause.getMessage()));
+            return null;
+        });
     }
 
     private void loadNote(Note note) {
@@ -227,17 +246,24 @@ public class MainController {
     }
 
     private void createNewNote() {
-        try {
-            Note note = noteService.createNote("無題のメモ", "");
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return noteService.createNote("無題のメモ", "");
+            } catch (DataAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }).thenAccept(note -> Platform.runLater(() -> {
             logger.debug("Created new note with ID: {}", note.getId());
             reloadNotes();
             if (!items.isEmpty()) {
                 notesList.getSelectionModel().selectFirst();
             }
-        } catch (DataAccessException e) {
-            logger.error("Failed to create new note", e);
-            showError("新規メモの作成に失敗しました", e.getMessage());
-        }
+        })).exceptionally(ex -> {
+            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+            logger.error("Failed to create new note", cause);
+            Platform.runLater(() -> showError("新規メモの作成に失敗しました", cause.getMessage()));
+            return null;
+        });
     }
 
     private void saveCurrentNoteIfChanged() {
@@ -247,24 +273,50 @@ public class MainController {
         String body = Optional.ofNullable(bodyArea.getText()).orElse("");
         
         if (!title.equals(currentNote.getTitle()) || !body.equals(currentNote.getBody())) {
-            try {
-                currentNote.setTitle(title.isEmpty() ? "無題のメモ" : title);
-                currentNote.setBody(body);
-                noteService.updateNote(currentNote);
-                logger.debug("Note saved: ID={}, title='{}'", currentNote.getId(), currentNote.getTitle());
+            Note toUpdate = currentNote;
+            toUpdate.setTitle(title.isEmpty() ? "無題のメモ" : title);
+            toUpdate.setBody(body);
+            CompletableFuture.runAsync(() -> {
+                try {
+                    noteService.updateNote(toUpdate);
+                } catch (DataAccessException e) {
+                    throw new RuntimeException(e);
+                }
+            }).thenRun(() -> Platform.runLater(() -> {
+                logger.debug("Note saved: ID={}, title='{}'", toUpdate.getId(), toUpdate.getTitle());
                 notesList.refresh();
-            } catch (DataAccessException e) {
-                logger.error("Failed to save note ID: {}", currentNote.getId(), e);
-                showError("メモの保存に失敗しました", e.getMessage());
-            }
+            })).exceptionally(ex -> {
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                logger.error("Failed to save note ID: {}", toUpdate.getId(), cause);
+                Platform.runLater(() -> showError("メモの保存に失敗しました", cause.getMessage()));
+                return null;
+            });
         }
     }
 
     private void showError(String title, String message) {
         logger.warn("Error: {} - {}", title, message);
-        Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
-        alert.setTitle(title);
-        alert.showAndWait();
+        if (isHeadlessEnv()) {
+            // In headless/test environments, avoid blocking dialogs
+            return;
+        }
+        Runnable showDialog = () -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
+            alert.setTitle(title);
+            alert.showAndWait();
+        };
+        if (Platform.isFxApplicationThread()) {
+            showDialog.run();
+        } else {
+            Platform.runLater(showDialog);
+        }
+    }
+
+    private boolean isHeadlessEnv() {
+        // Prefer explicit app flag, then standard Java headless flag
+        if (Boolean.getBoolean("hiyori.headless")) return true;
+        if (Boolean.getBoolean("java.awt.headless")) return true;
+        return false;
     }
 
     // Getters for UI components

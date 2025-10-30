@@ -85,7 +85,6 @@ class NoteServiceTest {
     @Test
     @Order(2)
     @DisplayName("メモ検索が正常に動作する")
-    @Disabled("FTS検索の問題を調査中 - 後で修正予定")
     void testSearchNotes() throws DataAccessException {
         // Given
         List<Note> searchTestNotes = TestDataFactory.createSearchTestNotes();

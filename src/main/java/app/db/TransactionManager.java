@@ -170,12 +170,8 @@ public class TransactionManager {
             readContext.depth = 1;
             contextHolder.set(readContext);
 
-            try {
-                conn.setReadOnly(true);
-            } catch (SQLException e) {
-                logger.debug("Failed to mark connection as read-only", e);
-            }
-
+            // SQLite JDBC does not support toggling read-only after connection creation.
+            // For compatibility across drivers, we skip setReadOnly here.
             return operation.get();
         } catch (app.exception.DatabaseException e) {
             throw new DataAccessException("データベース接続の取得に失敗しました", e);
@@ -186,11 +182,6 @@ public class TransactionManager {
         } finally {
             contextHolder.remove();
             if (conn != null) {
-                try {
-                    conn.setReadOnly(false);
-                } catch (SQLException e) {
-                    logger.debug("Failed to reset read-only flag", e);
-                }
                 try {
                     conn.setAutoCommit(readContext.originalAutoCommit);
                 } catch (SQLException e) {
