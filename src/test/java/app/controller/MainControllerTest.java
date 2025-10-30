@@ -1,5 +1,6 @@
 package app.controller;
 
+import app.config.AppConfig;
 import app.service.EventService;
 import app.service.NoteService;
 import app.exception.DataAccessException;
@@ -14,6 +15,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -32,10 +35,22 @@ class MainControllerTest {
     private EventService mockEventService;
     
     private MainController mainController;
+    private String originalHeadlessProperty;
 
     @BeforeEach
     void setUp() {
+        originalHeadlessProperty = System.getProperty("hiyori.headless");
+        System.setProperty("hiyori.headless", "true");
         mainController = new MainController(mockNoteService, mockEventService);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (originalHeadlessProperty != null) {
+            System.setProperty("hiyori.headless", originalHeadlessProperty);
+        } else {
+            System.clearProperty("hiyori.headless");
+        }
     }
 
     @Test
@@ -68,14 +83,15 @@ class MainControllerTest {
     void testLoadInitialData() throws DataAccessException {
         // Given
         List<Note> mockNotes = TestDataFactory.createNotes(3);
-        when(mockNoteService.getRecentNotes()).thenReturn(mockNotes);
+        int limit = AppConfig.getInstance().getNotesListMaxItems();
+        when(mockNoteService.getRecentNotesWithLimit(limit)).thenReturn(mockNotes);
 
         // When
         mainController.loadInitialData();
 
         // Then
-        verify(mockNoteService).getRecentNotes();
-        assertThat(mainController.getNotesList().getItems()).hasSize(3);
+        verify(mockNoteService, timeout(1000)).getRecentNotesWithLimit(limit);
+        waitForCondition(() -> mainController.getNotesList().getItems().size() == 3);
     }
 
     @Test
@@ -83,13 +99,14 @@ class MainControllerTest {
     @DisplayName("初期データ読み込み時のエラーハンドリング")
     void testLoadInitialDataWithError() throws DataAccessException {
         // Given
-        when(mockNoteService.getRecentNotes()).thenThrow(new DataAccessException("データベースエラー"));
+        int limit = AppConfig.getInstance().getNotesListMaxItems();
+        when(mockNoteService.getRecentNotesWithLimit(limit)).thenThrow(new DataAccessException("データベースエラー"));
 
         // When & Then - エラーが発生してもアプリケーションがクラッシュしないことを確認
-        // JavaFXのAlertダイアログはテストスレッドでは実行できないため、例外をキャッチ
-        assertThatThrownBy(() -> mainController.loadInitialData())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("Not on FX application thread");
+        assertThatCode(() -> mainController.loadInitialData())
+            .doesNotThrowAnyException();
+        verify(mockNoteService, timeout(1000)).getRecentNotesWithLimit(limit);
+        waitForCondition(() -> mainController.getNotesList().getItems().isEmpty());
     }
 
     @Test
@@ -99,14 +116,16 @@ class MainControllerTest {
         // Given
         List<Note> mockNotes = TestDataFactory.createNotes(2);
         when(mockNoteService.searchNotes("テスト")).thenReturn(mockNotes);
+        when(mockEventService.searchEventsByTitle("テスト")).thenReturn(List.of());
 
         // When - 検索フィールドにテキストを設定してイベントを発火
         mainController.getSearchField().setText("テスト");
         mainController.getSearchField().fireEvent(new javafx.event.ActionEvent());
 
         // Then
-        verify(mockNoteService).searchNotes("テスト");
-        assertThat(mainController.getNotesList().getItems()).hasSize(2);
+        verify(mockNoteService, timeout(1000)).searchNotes("テスト");
+        verify(mockEventService, timeout(1000)).searchEventsByTitle("テスト");
+        waitForCondition(() -> mainController.getNotesList().getItems().size() == 2);
     }
 
     @Test
@@ -174,5 +193,25 @@ class MainControllerTest {
         assertThat(mainController.getTitleField().getFont()).isNotNull();
         assertThat(mainController.getBodyArea().getFont()).isNotNull();
         assertThat(mainController.getNotesList()).isNotNull();
+    }
+
+    private void waitForCondition(BooleanSupplier condition) {
+        waitForCondition(condition, 2000);
+    }
+
+    private void waitForCondition(BooleanSupplier condition, long timeoutMillis) {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                fail("待機中に割り込まれました", e);
+            }
+        }
+        fail("条件がタイムアウト内に満たされませんでした");
     }
 }

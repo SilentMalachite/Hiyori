@@ -29,11 +29,17 @@ class ConnectionPoolStressTest {
     
     private Database database;
     private Path dbPath;
+    private Path tempDir;
+    private String originalPoolSizeProperty;
 
     @BeforeEach
     void setUp() throws IOException, DatabaseException {
         // テスト用の一時データベースファイルを作成
-        Path tempDir = Files.createTempDirectory("connection-pool-test-");
+        originalPoolSizeProperty = System.getProperty("db.pool.size");
+        int poolSize = Math.max(2, Runtime.getRuntime().availableProcessors());
+        System.setProperty("db.pool.size", String.valueOf(poolSize));
+
+        this.tempDir = Files.createTempDirectory("connection-pool-test-");
         this.dbPath = tempDir.resolve("test.db");
         this.database = new Database(dbPath.toString());
         this.database.initialize();
@@ -44,9 +50,16 @@ class ConnectionPoolStressTest {
         if (database != null) {
             database.close();
         }
+        if (originalPoolSizeProperty != null) {
+            System.setProperty("db.pool.size", originalPoolSizeProperty);
+        } else {
+            System.clearProperty("db.pool.size");
+        }
         try {
             Files.deleteIfExists(dbPath);
-            Files.deleteIfExists(dbPath.getParent());
+            if (tempDir != null) {
+                Files.deleteIfExists(tempDir);
+            }
         } catch (IOException e) {
             // クリーンアップ失敗は無視
         }
