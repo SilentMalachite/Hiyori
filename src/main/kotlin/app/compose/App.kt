@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import app.compose.notes.NotesScreen
+import app.compose.events.WeekViewScreen
 import org.slf4j.LoggerFactory
 import java.io.InputStream
 import java.util.Properties
@@ -31,7 +32,7 @@ object AppConfigReader {
 }
 
 @Composable
-private fun RootScreen(dbPath: String?, onOpenNotes: () -> Unit) {
+private fun RootScreen(dbPath: String?, onOpenNotes: () -> Unit, onOpenWeekView: () -> Unit) {
     MaterialTheme(colorScheme = darkColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -39,24 +40,23 @@ private fun RootScreen(dbPath: String?, onOpenNotes: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Hiyori (Compose Desktop)", style = MaterialTheme.typography.headlineSmall)
-                Text("This is the new Compose Desktop scaffold. Migration in progress.")
+                Text("ローカル専用のメモ＋スケジュール管理アプリケーション")
                 if (!dbPath.isNullOrBlank()) {
                     AssistChip(onClick = {}, label = { Text("DB: $dbPath") })
                 } else {
                     AssistChip(onClick = {}, label = { Text("DB: (not set)") })
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = onOpenNotes) { Text("Open Notes") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = { /* TODO: Navigate to Week View */ }) { Text("Open Week View") }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onOpenNotes) { Text("メモ帳を開く") }
+                    Button(onClick = onOpenWeekView) { Text("週ビューを開く") }
                 }
             }
         }
     }
 }
 
-enum class Screen { Home, Notes }
+enum class Screen { Home, Notes, WeekView }
 
 fun main() = application {
     val log = LoggerFactory.getLogger("ComposeMain")
@@ -68,8 +68,13 @@ fun main() = application {
     log.info("Starting Hiyori (Compose Desktop)…")
     Window(onCloseRequest = ::exitApplication, title = "Hiyori (Compose)") {
         when (screen) {
-            Screen.Home -> RootScreen(dbPath = dbPath, onOpenNotes = { screen = Screen.Notes })
+            Screen.Home -> RootScreen(
+                dbPath = dbPath,
+                onOpenNotes = { screen = Screen.Notes },
+                onOpenWeekView = { screen = Screen.WeekView }
+            )
             Screen.Notes -> NotesScreen(onBack = { screen = Screen.Home })
+            Screen.WeekView -> WeekViewScreen(onBack = { screen = Screen.Home })
         }
     }
 }

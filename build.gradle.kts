@@ -2,6 +2,7 @@ import java.time.Duration
 
 plugins {
     kotlin("jvm") version "2.0.21"
+    kotlin("plugin.compose") version "2.0.21"
     id("org.jetbrains.compose") version "1.7.0"
 }
 
@@ -37,19 +38,14 @@ tasks.withType<Test> {
 
 repositories {
     mavenCentral()
+    google()
+    maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
 }
 
 kotlin {
     jvmToolchain(21)
 }
 
-tasks.withType<JavaCompile> {
-    // Exclude legacy JavaFX-based UI and JPMS descriptor during migration to Compose
-    exclude("module-info.java")
-    exclude("app/MainApp.java")
-    exclude("app/controller/**")
-    exclude("app/ui/**")
-}
 
 java {
     toolchain {

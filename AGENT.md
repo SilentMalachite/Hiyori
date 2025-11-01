@@ -1,17 +1,18 @@
 # AGENT.md
 
 ## プロジェクト概要
-Java 21 + JavaFX を用いて、ローカルで高速に動作する「メモ帳＋スケジュール管理」アプリケーション。  
+Kotlin + Compose Desktop を用いて、ローカルで高速に動作する「メモ帳＋スケジュール管理」アプリケーション。  
 クラウド依存を避け、起動と操作を軽量化し、ASD/ADHD特性に配慮したUI設計を重視。
 
 ---
 
 ## 技術スタック
-- **UI**: JavaFX 21  
+- **UI**: Jetpack Compose Desktop (Compose Multiplatform)  
+- **言語**: Kotlin 2.0.21 + Java 21 (データ層)  
 - **データ永続化**: SQLite (Xerial sqlite-jdbc)  
   - メモ検索: SQLite FTS5  
-- **スレッド処理**: Java 21 仮想スレッド (Loom)  
-- **配布**: jlink + jpackage
+- **非同期処理**: Kotlin Coroutines  
+- **配布**: Compose Gradle Plugin (jpackage統合)
 
 ---
 
@@ -30,10 +31,12 @@ Java 21 + JavaFX を用いて、ローカルで高速に動作する「メモ帳
 
 ## UI設計
 ### メイン画面
-- 上部: グローバル検索 (メモ・予定横断)
-- 左: メモ一覧 (ListView)
-- 右: メモエディタ (タイトル+本文)
-- 下: カレンダー (日/週/月ビュータブ)
+- ホーム画面: アプリ情報とナビゲーション
+- メモ画面:
+  - 上部: 検索バー
+  - 左: メモ一覧 (LazyColumn + スクロールバー)
+  - 右: メモエディタ (タイトル+本文、BasicTextField)
+- 予定画面: (実装予定)
 
 ### ASD/ADHDフレンドリーな工夫
 - 刺激を減らす: 色数3以内、アニメーション抑制
@@ -53,11 +56,11 @@ Java 21 + JavaFX を用いて、ローカルで高速に動作する「メモ帳
 
 ---
 
-## 週ビュー設計
+## 週ビュー設計 (実装予定)
 ### レイアウト
 - 7列 (月〜日)
 - 縦方向 0:00〜24:00、15分刻み (96行)
-- `Canvas` による軽量描画
+- Compose Canvas による軽量描画
 - 重なりは列分割表示
 
 ### 操作
@@ -65,32 +68,35 @@ Java 21 + JavaFX を用いて、ローカルで高速に動作する「メモ帳
 - 既存短冊ドラッグ: 移動
 - 上下ハンドル: リサイズ
 - スナップ: 5/10/15/30分刻みに吸着
-- Altキー: スナップ解除
+- Modifierキー: スナップ解除
 - ダブルクリック: インライン編集
-- Tab/Enter/Esc: アクセシビリティ対応
+- キーボード操作対応
 - 衝突: 自動で列割り当て
 
 ---
 
 ## パフォーマンス最適化
 - SQLite: WALモード + synchronous=NORMAL
-- 自動保存: 500〜700msデバウンス
-- リスト: 最大500件までページング
-- 軽量フォント + WrapText
-- Canvas描画でスクロール高速化
+- 自動保存: 600msデバウンス (Kotlin Flow)
+- 検索: 200msデバウンス (Kotlin Flow)
+- リスト: LazyColumn による仮想化
+- 非同期処理: Dispatchers.IO でDB操作
 
 ---
 
 ## ビルドと配布
 ```bash
-# 軽量JRE作成
-jlink --add-modules java.base,java.sql,javafx.controls,javafx.fxml \
-      --compress=2 --no-header-files --no-man-pages \
-      --output build/runtime
+# 実行
+./gradlew run
 
-# ネイティブパッケージ
-jpackage --name Hiyori \
-         --app-version 0.1.0 \
-         --input build/libs \
-         --main-jar your-fat-jar.jar \
-         --runtime-image build/runtime
+# テスト
+./gradlew test
+
+# ネイティブ配布パッケージ作成 (macOS: DMG, Windows: MSI, Linux: DEB)
+./gradlew packageDistributionForCurrentOS
+
+# または jpackage タスクで直接
+./gradlew jpackage
+```
+
+Compose Gradle Plugin が自動的にプラットフォーム固有のパッケージを生成します。
