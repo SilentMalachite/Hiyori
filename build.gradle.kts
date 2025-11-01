@@ -88,7 +88,12 @@ compose.desktop {
             packageVersion = (project.findProperty("app.version") as String?) ?: System.getenv("APP_VERSION") ?: "1.0.0"
             description = "Hiyori - Notes & Schedule (Compose Desktop)"
             vendor = (project.findProperty("app.vendor") as String?) ?: System.getenv("APP_VENDOR") ?: "Hiyori"
-            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb)
+            targetFormats(
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Rpm
+            )
             macOS {
                 val macIcon = file("packaging/icons/hiyori.icns")
                 if (macIcon.exists()) iconFile.set(macIcon)

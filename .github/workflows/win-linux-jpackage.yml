@@ -100,7 +100,11 @@ jobs:
 
       - name: Build ${{ matrix.pkg }} installer (Compose Desktop)
         run: |
-          ./gradlew --no-daemon packageDeb packageRpm
+          if [ "${{ matrix.pkg }}" = "deb" ]; then
+            ./gradlew --no-daemon packageDeb
+          else
+            ./gradlew --no-daemon packageRpm
+          fi
 
       - name: Upload ${{ matrix.pkg }} artifact
         uses: actions/upload-artifact@v4
