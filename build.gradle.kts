@@ -1,9 +1,8 @@
 import java.time.Duration
 
 plugins {
-    application
-    id("org.openjfx.javafxplugin") version "0.0.14"
-    id("org.beryx.jlink") version "3.0.1"
+    kotlin("jvm") version "2.0.21"
+    id("org.jetbrains.compose") version "1.7.0"
 }
 
 tasks.withType<Test> {
@@ -40,6 +39,18 @@ repositories {
     mavenCentral()
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType<JavaCompile> {
+    // Exclude legacy JavaFX-based UI and JPMS descriptor during migration to Compose
+    exclude("module-info.java")
+    exclude("app/MainApp.java")
+    exclude("app/controller/**")
+    exclude("app/ui/**")
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
@@ -47,6 +58,15 @@ java {
 }
 
 dependencies {
+    // Jetpack Compose Desktop
+    implementation(compose.desktop.currentOs)
+    // Material 3 for Compose Multiplatform + icons
+    implementation(compose.material3)
+    implementation(compose.materialIconsExtended)
+    
+    // Kotlin coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+
     // SQLite JDBC driver - updated to latest stable
     implementation("org.xerial:sqlite-jdbc:3.47.0.0")
     
@@ -63,72 +83,32 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-javafx {
-    version = "21"
-    modules = listOf("javafx.controls", "javafx.fxml")
-}
 
-application {
-    mainClass.set("app.MainApp")
-    mainModule.set("hiyori")
-}
-
-tasks.named<org.gradle.api.tasks.JavaExec>("run") {
-    // Improve font rendering on some platforms and enable UTF-8 default
-    jvmArgs("-Dfile.encoding=UTF-8")
-}
-
-jlink {
-    options = listOf("--strip-debug", "--compress=zip-6", "--no-header-files", "--no-man-pages")
-    // Module name from module-info.java
-    moduleName = "hiyori"
-    launcher {
-        name = "Hiyori"
-    }
-    jpackage {
-        val os = org.gradle.internal.os.OperatingSystem.current()
-
-        fun prop(name: String, default: String): String =
-            (project.findProperty(name) as String?)
-                ?: System.getenv(name.replace('.', '_').uppercase())
-                ?: default
-
-        val appName = prop("app.name", "Hiyori")
-        val appVersionVal = prop("app.version", "1.0.0")
-        val vendorName = prop("app.vendor", "Hiyori")
-        val macBundleId = prop("app.macBundleId", "dev.hiyori.app")
-        val installerTypeProp = prop("app.installerType", if (os.isMacOsX) "pkg" else "")
-
-        val macIcon = file("packaging/icons/hiyori.icns")
-        val winIcon = file("packaging/icons/hiyori.ico")
-
-        imageName = appName
-        installerName = appName
-        appVersion = appVersionVal
-        vendor = vendorName
-
-        val imgOpts = mutableListOf("--name", appName)
-        if (os.isMacOsX && macIcon.exists()) imgOpts += listOf("--icon", macIcon.absolutePath)
-        if (os.isWindows && winIcon.exists()) imgOpts += listOf("--icon", winIcon.absolutePath)
-        imageOptions = imgOpts
-
-        val instOpts = mutableListOf("--name", appName)
-        if (os.isMacOsX) {
-            instOpts += listOf("--mac-package-name", appName, "--mac-package-identifier", macBundleId)
-        }
-        if (os.isWindows) {
-            instOpts += listOf("--win-dir-chooser", "--win-menu", "--win-menu-group", appName, "--win-shortcut")
-        }
-        if (os.isLinux) {
-            instOpts += listOf("--linux-shortcut", "--linux-menu-group", appName)
-        }
-        if (os.isWindows && winIcon.exists()) instOpts += listOf("--icon", winIcon.absolutePath)
-        if (os.isMacOsX && macIcon.exists()) instOpts += listOf("--icon", macIcon.absolutePath)
-        installerOptions = instOpts
-
-        // Allow overriding installerType via property/ENV across all OS
-        if (installerTypeProp.isNotBlank()) {
-            installerType = installerTypeProp
+compose.desktop {
+    application {
+        mainClass = "app.compose.AppKt"
+        nativeDistributions {
+            packageName = "Hiyori"
+            packageVersion = (project.findProperty("app.version") as String?) ?: System.getenv("APP_VERSION") ?: "1.0.0"
+            description = "Hiyori - Notes & Schedule (Compose Desktop)"
+            vendor = (project.findProperty("app.vendor") as String?) ?: System.getenv("APP_VENDOR") ?: "Hiyori"
+            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb)
+            macOS {
+                val macIcon = file("packaging/icons/hiyori.icns")
+                if (macIcon.exists()) iconFile.set(macIcon)
+                packageName = (project.findProperty("app.name") as String?) ?: System.getenv("APP_NAME") ?: "Hiyori"
+                bundleID = (project.findProperty("app.macBundleId") as String?) ?: System.getenv("APP_MACBUNDLEID") ?: "dev.hiyori.app"
+            }
+            windows {
+                val winIcon = file("packaging/icons/hiyori.ico")
+                if (winIcon.exists()) iconFile.set(winIcon)
+                menu = true
+                shortcut = true
+                perUserInstall = true
+            }
+            linux {
+                shortcut = true
+            }
         }
     }
 }
