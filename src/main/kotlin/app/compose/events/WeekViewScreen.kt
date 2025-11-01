@@ -112,6 +112,37 @@ fun WeekViewScreen(
                 onEventClick = { event ->
                     selectedEvent = event
                     showEditDialog = true
+                },
+                onEventDrag = { event, offsetMinutes ->
+                    // ドラッグでイベントを移動
+                    scope.launch {
+                        val newStartTime = calculateNewStartTime(event, offsetMinutes)
+                        val duration = event.durationMinutes
+                        val newEndTime = newStartTime.plusMinutes(duration)
+                        
+                        val updatedEvent = event.copy(
+                            startEpochSec = newStartTime.atZone(ZoneId.systemDefault()).toEpochSecond(),
+                            endEpochSec = newEndTime.atZone(ZoneId.systemDefault()).toEpochSecond()
+                        )
+                        
+                        runCatching { EventBackend.update(updatedEvent) }
+                            .onSuccess { loadEvents() }
+                            .onFailure { log.warn("Failed to update event: {}", it.message) }
+                    }
+                },
+                onEventResize = { event, offsetMinutes ->
+                    // リサイズで終了時刻を調整
+                    scope.launch {
+                        val newEndTime = calculateNewEndTime(event, offsetMinutes)
+                        
+                        val updatedEvent = event.copy(
+                            endEpochSec = newEndTime.atZone(ZoneId.systemDefault()).toEpochSecond()
+                        )
+                        
+                        runCatching { EventBackend.update(updatedEvent) }
+                            .onSuccess { loadEvents() }
+                            .onFailure { log.warn("Failed to resize event: {}", it.message) }
+                    }
                 }
             )
         }
@@ -186,7 +217,9 @@ private fun WeekHeader(weekRange: WeekRange) {
 private fun WeekGrid(
     weekRange: WeekRange,
     events: List<EventUi>,
-    onEventClick: (EventUi) -> Unit
+    onEventClick: (EventUi) -> Unit,
+    onEventDrag: (EventUi, Int) -> Unit,
+    onEventResize: (EventUi, Int) -> Unit
 ) {
     val scrollState = rememberScrollState()
     
@@ -238,7 +271,9 @@ private fun WeekGrid(
                             events = events.filter { event ->
                                 event.startTime.toLocalDate() == day
                             },
-                            onClick = onEventClick
+                            onClick = onEventClick,
+                            onDrag = onEventDrag,
+                            onResize = onEventResize
                         )
                     }
                 }
@@ -257,20 +292,33 @@ private fun WeekGrid(
 private fun EventsForDay(
     day: LocalDate,
     events: List<EventUi>,
-    onClick: (EventUi) -> Unit
+    onClick: (EventUi) -> Unit,
+    onDrag: (EventUi, Int) -> Unit,
+    onResize: (EventUi, Int) -> Unit
 ) {
+    // 衝突検出と列分割の計算
+    val layouts = remember(events) { calculateEventLayouts(events) }
+    
     Box(modifier = Modifier.fillMaxSize()) {
-        events.forEach { event ->
-            EventCard(event = event, onClick = { onClick(event) })
+        layouts.forEach { layout ->
+            EventCard(
+                layout = layout,
+                onClick = { onClick(layout.event) },
+                onDrag = onDrag,
+                onResize = onResize
+            )
         }
     }
 }
 
 @Composable
 private fun EventCard(
-    event: EventUi,
-    onClick: () -> Unit
+    layout: EventLayout,
+    onClick: () -> Unit,
+    onDrag: ((EventUi, Int) -> Unit)? = null,
+    onResize: ((EventUi, Int) -> Unit)? = null
 ) {
+    val event = layout.event
     val startTime = event.startTime
     val endTime = event.endTime
     
@@ -282,39 +330,124 @@ private fun EventCard(
     val topOffset = (startMinutes / 60f) * HOUR_HEIGHT.value
     val height = (durationMinutes / 60f) * HOUR_HEIGHT.value
     
+    // 列分割の計算
+    val columnWidth = 1f / layout.totalColumns
+    val columnOffset = layout.column * columnWidth
+    
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
     
     Card(
         modifier = Modifier
-            .offset(y = topOffset.dp)
+            .offset(
+                x = (columnOffset * COLUMN_WIDTH.value).dp,
+                y = (topOffset + if (isDragging) dragOffsetY else 0f).dp
+            )
             .height(height.dp)
-            .fillMaxWidth()
+            .width((columnWidth * COLUMN_WIDTH.value).dp)
             .padding(horizontal = 2.dp, vertical = 1.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .pointerInput(event.id) {
+                detectDragGestures(
+                    onDragStart = {
+                        isDragging = true
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffsetY += dragAmount.y
+                    },
+                    onDragEnd = {
+                        if (onDrag != null) {
+                            // ドラッグオフセットを分に変換
+                            val offsetMinutes = (dragOffsetY / HOUR_HEIGHT.value * 60).toInt()
+                            onDrag(event, offsetMinutes)
+                        }
+                        dragOffsetY = 0f
+                        isDragging = false
+                    },
+                    onDragCancel = {
+                        dragOffsetY = 0f
+                        isDragging = false
+                    }
+                )
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         ),
         shape = RoundedCornerShape(4.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp)
-        ) {
-            Text(
-                text = event.title.ifBlank { "無題" },
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = "${startTime.format(timeFormatter)} - ${endTime.format(timeFormatter)}",
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 9.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp)
+            ) {
+                Text(
+                    text = event.title.ifBlank { "無題" },
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "${startTime.format(timeFormatter)} - ${endTime.format(timeFormatter)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
+            
+            // 下部リサイズハンドル
+            if (onResize != null && height.dp > 30.dp) {
+                var resizeOffsetY by remember { mutableStateOf(0f) }
+                var isResizing by remember { mutableStateOf(false) }
+                
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .pointerInput(event.id) {
+                            detectDragGestures(
+                                onDragStart = { isResizing = true },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    resizeOffsetY += dragAmount.y
+                                },
+                                onDragEnd = {
+                                    val offsetMinutes = (resizeOffsetY / HOUR_HEIGHT.value * 60).toInt()
+                                    onResize(event, offsetMinutes)
+                                    resizeOffsetY = 0f
+                                    isResizing = false
+                                },
+                                onDragCancel = {
+                                    resizeOffsetY = 0f
+                                    isResizing = false
+                                }
+                            )
+                        }
+                        .background(
+                            if (isResizing) 
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            else 
+                                Color.Transparent
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .width(30.dp)
+                            .height(3.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                                RoundedCornerShape(2.dp)
+                            )
+                    )
+                }
+            }
         }
     }
 }
@@ -330,6 +463,8 @@ private fun EventEditDialog(
     var title by remember { mutableStateOf(event.title) }
     var startDateTime by remember { mutableStateOf(event.startTime) }
     var endDateTime by remember { mutableStateOf(event.endTime) }
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
     
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     
@@ -345,18 +480,40 @@ private fun EventEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 
-                Text(
-                    "開始: ${startDateTime.format(DateTimeFormatter.ofPattern("yyyy/M/d HH:mm"))}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                // 開始時刻
+                OutlinedButton(
+                    onClick = { showStartTimePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("開始")
+                        Text(startDateTime.format(DateTimeFormatter.ofPattern("yyyy/M/d HH:mm")))
+                    }
+                }
                 
-                Text(
-                    "終了: ${endDateTime.format(DateTimeFormatter.ofPattern("yyyy/M/d HH:mm"))}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                // 終了時刻
+                OutlinedButton(
+                    onClick = { showEndTimePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("終了")
+                        Text(endDateTime.format(DateTimeFormatter.ofPattern("yyyy/M/d HH:mm")))
+                    }
+                }
                 
+                // 時間の長さ表示
+                val durationMinutes = java.time.Duration.between(startDateTime, endDateTime).toMinutes()
                 Text(
-                    "時間: ${event.durationMinutes}分",
+                    "時間: ${durationMinutes}分",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -391,4 +548,37 @@ private fun EventEditDialog(
             }
         }
     )
+    
+    // 開始時刻ピッカー
+    if (showStartTimePicker) {
+        TimePickerDialog(
+            title = "開始時刻",
+            initialTime = startDateTime,
+            onDismiss = { showStartTimePicker = false },
+            onConfirm = { newTime ->
+                startDateTime = newTime
+                // 終了時刻が開始時刻より前なら調整
+                if (endDateTime.isBefore(startDateTime) || endDateTime.isEqual(startDateTime)) {
+                    endDateTime = startDateTime.plusMinutes(30)
+                }
+                showStartTimePicker = false
+            }
+        )
+    }
+    
+    // 終了時刻ピッカー
+    if (showEndTimePicker) {
+        TimePickerDialog(
+            title = "終了時刻",
+            initialTime = endDateTime,
+            onDismiss = { showEndTimePicker = false },
+            onConfirm = { newTime ->
+                // 開始時刻より後であることを保証
+                if (newTime.isAfter(startDateTime)) {
+                    endDateTime = newTime
+                }
+                showEndTimePicker = false
+            }
+        )
+    }
 }
