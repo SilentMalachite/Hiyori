@@ -3,6 +3,13 @@
 すべての notable な変更は本ファイルに記録します。
 このプロジェクトは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) と [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 
+## [2.0.1](https://github.com/SilentMalachite/Hiyori/compare/v2.0.0...v2.0.1) (2025-11-01)
+
+
+### Bug Fixes
+
+* add RPM support and fix Linux packaging workflow ([abb5b6d](https://github.com/SilentMalachite/Hiyori/commit/abb5b6deeca3ca91e09eabbfaad05d145786c81c))
+
 ## [Unreleased]
 
 ## [2.0.0] - 2025-11-01
@@ -67,4 +74,3 @@
 [Unreleased]: https://github.com/SilentMalachite/Hiyori/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/SilentMalachite/Hiyori/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/SilentMalachite/Hiyori/releases/tag/v1.0.0
-
