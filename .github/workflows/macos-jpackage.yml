@@ -39,15 +39,15 @@ jobs:
           echo "Version: $ver"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
 
-      - name: Build PKG installer (jpackage)
+      - name: Build DMG installer (Compose Desktop)
         run: |
-          ./gradlew --no-daemon jpackage
+          ./gradlew --no-daemon packageDmg
 
-      - name: Upload PKG artifact
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Hiyori-macos-pkg
-          path: build/jpackage/*.pkg
+          name: Hiyori-macos-dmg
+          path: build/compose/binaries/main/dmg/*.dmg
           if-no-files-found: error
 
       - name: Create GitHub Release and upload asset
@@ -56,7 +56,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Hiyori ${{ steps.meta.outputs.version }}
-          files: build/jpackage/*.pkg
+          files: build/compose/binaries/main/dmg/*.dmg
           draft: false
           prerelease: false
           generate_release_notes: true

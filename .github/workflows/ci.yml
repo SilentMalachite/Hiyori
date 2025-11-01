@@ -45,15 +45,15 @@ jobs:
             **/build/reports/tests/**
             **/build/test-results/**
 
-      - name: Create runtime image (jlink) (optional)
+      - name: Create distributable (optional)
         if: github.event_name != 'pull_request'
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
-            ./gradlew --no-daemon jlink
+            ./gradlew --no-daemon createDistributable
 
-      - name: Upload image artifact
+      - name: Upload distributable artifact
         if: success() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: app-image
-          path: build/image/**
+          name: app-distributable
+          path: build/compose/binaries/main/app/**

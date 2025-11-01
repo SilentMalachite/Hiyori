@@ -37,15 +37,15 @@ jobs:
           echo "APP_INSTALLERTYPE=msi" >> "$GITHUB_ENV"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
 
-      - name: Build MSI installer
+      - name: Build MSI installer (Compose Desktop)
         run: |
-          ./gradlew --no-daemon jpackage
+          ./gradlew --no-daemon packageMsi
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
           name: Hiyori-windows-msi
-          path: build/jpackage/*.msi
+          path: build/compose/binaries/main/msi/*.msi
           if-no-files-found: error
 
       - name: Create GitHub Release and upload asset
@@ -54,7 +54,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Hiyori ${{ steps.meta.outputs.version }}
-          files: build/jpackage/*.msi
+          files: build/compose/binaries/main/msi/*.msi
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -98,15 +98,15 @@ jobs:
           echo "APP_INSTALLERTYPE=${{ matrix.pkg }}" >> "$GITHUB_ENV"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
 
-      - name: Build ${{ matrix.pkg }} installer
+      - name: Build ${{ matrix.pkg }} installer (Compose Desktop)
         run: |
-          ./gradlew --no-daemon jpackage
+          ./gradlew --no-daemon packageDeb packageRpm
 
       - name: Upload ${{ matrix.pkg }} artifact
         uses: actions/upload-artifact@v4
         with:
           name: Hiyori-linux-${{ matrix.pkg }}
-          path: build/jpackage/*.${{ matrix.pkg }}
+          path: build/compose/binaries/main/${{ matrix.pkg }}/*.${{ matrix.pkg }}
           if-no-files-found: error
 
       - name: Create GitHub Release and upload asset
@@ -115,7 +115,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Hiyori ${{ steps.meta.outputs.version }}
-          files: build/jpackage/*.${{ matrix.pkg }}
+          files: build/compose/binaries/main/${{ matrix.pkg }}/*.${{ matrix.pkg }}
           draft: false
           prerelease: false
           generate_release_notes: true
